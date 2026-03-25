@@ -162,7 +162,7 @@ def apply_onecli_config(cmd: list, env_file: Path) -> None:
     dbg("OneCLI proxy config applied")
 
 
-INTEGRATION_ENV_KEYS = ["ANTHROPIC_BASE_URL", "KASA_USERNAME", "KASA_PASSWORD", "MYSA_EMAIL", "MYSA_PASSWORD", "GOOGLE_SERVICE_ACCOUNT_JSON", "GOOGLE_FAMILY_CALENDAR_ID", "GOOGLE_PERSONAL_CALENDAR_ID"]
+INTEGRATION_ENV_KEYS = ["ANTHROPIC_BASE_URL", "ANTHROPIC_API_KEY", "AGENT_MODEL", "KASA_USERNAME", "KASA_PASSWORD", "MYSA_EMAIL", "MYSA_PASSWORD", "GOOGLE_SERVICE_ACCOUNT_JSON", "GOOGLE_FAMILY_CALENDAR_ID", "GOOGLE_PERSONAL_CALENDAR_ID"]
 
 def apply_integration_env(cmd: list, env_file: Path) -> None:
     """Pass integration-specific env vars from .env into the container."""

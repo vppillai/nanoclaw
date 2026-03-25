@@ -22,7 +22,74 @@
 
 NanoClaw provides that same core functionality, but in a codebase small enough to understand: one process and a handful of files. Claude agents run in their own Linux containers with filesystem isolation, not merely behind permission checks.
 
-## Quick Start
+## Quick Deploy (Raspberry Pi / Linux Server)
+
+For headless deployment without Claude Code (e.g. Raspberry Pi, VPS):
+
+```bash
+# Prerequisites: Node.js 24+, Docker, git
+git clone https://github.com/<your-username>/nanoclaw.git
+cd nanoclaw
+
+# Configure
+cp .env.example .env
+# Edit .env — set ANTHROPIC_API_KEY and ANTHROPIC_BASE_URL at minimum
+
+# Build
+npm install
+npm run build
+./container/build.sh
+
+# Run
+node dist/index.js
+```
+
+<details>
+<summary>Systemd service (auto-start on boot)</summary>
+
+```bash
+mkdir -p ~/.config/systemd/user
+cat << 'EOF' > ~/.config/systemd/user/nanoclaw.service
+[Unit]
+Description=NanoClaw Personal Assistant
+After=network-online.target docker.service
+Wants=network-online.target
+
+[Service]
+Type=simple
+WorkingDirectory=/path/to/nanoclaw
+ExecStart=/usr/bin/node dist/index.js
+Restart=always
+RestartSec=10
+Environment=NODE_ENV=production
+
+[Install]
+WantedBy=default.target
+EOF
+
+sudo loginctl enable-linger $USER   # start without login
+systemctl --user daemon-reload
+systemctl --user enable --now nanoclaw
+```
+
+</details>
+
+<details>
+<summary>Key .env variables</summary>
+
+| Variable | Required | Description |
+|----------|----------|-------------|
+| `ANTHROPIC_BASE_URL` | Yes | API endpoint (e.g. `https://api.minimax.io/anthropic`) |
+| `ANTHROPIC_API_KEY` | Yes* | API key (*not needed if using OneCLI) |
+| `AGENT_MODEL` | No | Model name (default: `MiniMax-M2.7-highspeed`) |
+| `ASSISTANT_NAME` | No | Trigger name (default: `Andy`) |
+| `MAX_CONCURRENT_CONTAINERS` | No | Limit for constrained devices (default: 5) |
+
+See `.env.example` for all options.
+
+</details>
+
+## Quick Start (with Claude Code)
 
 ```bash
 gh repo fork qwibitai/nanoclaw --clone
