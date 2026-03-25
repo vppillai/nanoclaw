@@ -167,9 +167,9 @@ describe('TRIGGER_PATTERN', () => {
 
 describe('getTriggerPattern', () => {
   it('uses the configured per-group trigger when provided', () => {
-    const pattern = getTriggerPattern('@Claw');
+    const pattern = getTriggerPattern('@CustomBot');
 
-    expect(pattern.test('@Claw hello')).toBe(true);
+    expect(pattern.test('@CustomBot hello')).toBe(true);
     expect(pattern.test(`@${ASSISTANT_NAME} hello`)).toBe(false);
   });
 
@@ -278,13 +278,13 @@ describe('trigger gating (requiresTrigger interaction)', () => {
   });
 
   it('non-main group uses its per-group trigger instead of the default trigger', () => {
-    const msgs = [makeMsg({ content: '@Claw do something' })];
-    expect(shouldProcess(false, true, '@Claw', msgs)).toBe(true);
+    const msgs = [makeMsg({ content: '@CustomBot do something' })];
+    expect(shouldProcess(false, true, '@CustomBot', msgs)).toBe(true);
   });
 
   it('non-main group does not process when only the default trigger is present for a custom-trigger group', () => {
     const msgs = [makeMsg({ content: `@${ASSISTANT_NAME} do something` })];
-    expect(shouldProcess(false, true, '@Claw', msgs)).toBe(false);
+    expect(shouldProcess(false, true, '@CustomBot', msgs)).toBe(false);
   });
 
   it('non-main group with requiresTrigger=false always processes (no trigger needed)', () => {
