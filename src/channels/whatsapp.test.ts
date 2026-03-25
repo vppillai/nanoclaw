@@ -538,7 +538,7 @@ describe('WhatsAppChannel', () => {
       );
     });
 
-    it('delivers voice messages with placeholder text', async () => {
+    it('delivers voice messages with transcription fallback', async () => {
       const opts = createTestOpts();
       const channel = new WhatsAppChannel(opts);
 
@@ -560,12 +560,16 @@ describe('WhatsAppChannel', () => {
         },
       ]);
 
-      // Voice messages are delivered with a placeholder since no STT is available
+      // Wait for async transcription attempt (network call or timeout)
+      await new Promise((r) => setTimeout(r, 500));
+
+      // Voice messages attempt transcription; fallback when whisper server unavailable
       expect(opts.onMessage).toHaveBeenCalledWith(
         'registered@g.us',
         expect.objectContaining({
-          content:
-            '[Voice message received - audio transcription not available]',
+          content: expect.stringMatching(
+            /^\[Voice: .+\]$|\[Voice message received - transcription (unavailable|failed)\]$/,
+          ),
           sender_name: 'Frank',
         }),
       );

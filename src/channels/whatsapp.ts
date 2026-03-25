@@ -30,6 +30,36 @@ import {
 import { registerChannel, ChannelOpts } from './registry.js';
 
 const GROUP_SYNC_INTERVAL_MS = 24 * 60 * 60 * 1000; // 24 hours
+const WHISPER_URL = 'http://127.0.0.1:8178/inference';
+
+/**
+ * Transcribe audio buffer via local whisper.cpp server.
+ * Returns trimmed transcript text, or null on failure.
+ */
+async function transcribeAudio(buffer: Buffer): Promise<string | null> {
+  try {
+    const formData = new FormData();
+    formData.append(
+      'file',
+      new Blob([buffer], { type: 'audio/ogg' }),
+      'voice.ogg',
+    );
+    formData.append('response_format', 'json');
+
+    const resp = await fetch(WHISPER_URL, {
+      method: 'POST',
+      body: formData,
+      signal: AbortSignal.timeout(30000),
+    });
+
+    if (!resp.ok) return null;
+
+    const data = (await resp.json()) as { text?: string };
+    return data.text?.trim() || null;
+  } catch {
+    return null;
+  }
+}
 
 export interface WhatsAppChannelOpts {
   onMessage: OnInboundMessage;
@@ -241,12 +271,31 @@ export class WhatsAppChannel implements Channel {
               }
             }
 
-            // Voice message handling — deliver as placeholder since no STT is available
+            // Voice message handling — transcribe via local whisper.cpp server
             // Skip bot's own voice messages to avoid a feedback loop
             if (!content && normalized?.audioMessage?.ptt) {
               if (msg.key.fromMe) continue;
-              content =
-                '[Voice message received - audio transcription not available]';
+              try {
+                const audioBuffer = await downloadMediaMessage(
+                  msg,
+                  'buffer',
+                  {},
+                );
+                const transcript = await transcribeAudio(audioBuffer as Buffer);
+                if (transcript) {
+                  content = `[Voice: ${transcript}]`;
+                  logger.info(
+                    { chatJid, length: transcript.length },
+                    'Transcribed voice message',
+                  );
+                } else {
+                  content =
+                    '[Voice message received - transcription unavailable]';
+                }
+              } catch (err) {
+                logger.warn({ err, chatJid }, 'Voice transcription failed');
+                content = '[Voice message received - transcription failed]';
+              }
             }
 
             // Skip protocol messages with no text content (encryption keys, read receipts, etc.)
