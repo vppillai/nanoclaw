@@ -277,7 +277,11 @@ export class WhatsAppChannel implements Channel {
     });
   }
 
-  async sendMessage(jid: string, text: string): Promise<void> {
+  async sendMessage(
+    jid: string,
+    text: string,
+    mediaPath?: string,
+  ): Promise<void> {
     // Prefix bot messages with assistant name so users know who's speaking.
     // On a shared number, prefix is also needed in DMs (including self-chat)
     // to distinguish bot output from user messages.
@@ -295,8 +299,58 @@ export class WhatsAppChannel implements Channel {
       return;
     }
     try {
-      await this.sock.sendMessage(jid, { text: prefixed });
-      logger.info({ jid, length: prefixed.length }, 'Message sent');
+      if (mediaPath && fs.existsSync(mediaPath)) {
+        const buffer = fs.readFileSync(mediaPath);
+        const ext = mediaPath.split('.').pop()?.toLowerCase();
+        if (
+          ext === 'jpg' ||
+          ext === 'jpeg' ||
+          ext === 'png' ||
+          ext === 'webp'
+        ) {
+          await this.sock.sendMessage(jid, {
+            image: buffer,
+            caption: prefixed || undefined,
+          });
+          logger.info({ jid, mediaPath, type: 'image' }, 'Image message sent');
+        } else if (
+          ext === 'mp3' ||
+          ext === 'ogg' ||
+          ext === 'wav' ||
+          ext === 'opus'
+        ) {
+          await this.sock.sendMessage(jid, {
+            audio: buffer,
+            mimetype:
+              ext === 'mp3'
+                ? 'audio/mpeg'
+                : ext === 'wav'
+                  ? 'audio/wav'
+                  : 'audio/ogg; codecs=opus',
+            ptt: true,
+          });
+          logger.info({ jid, mediaPath, type: 'audio' }, 'Audio message sent');
+          // Send caption as separate text if present
+          if (prefixed) {
+            await this.sock.sendMessage(jid, { text: prefixed });
+          }
+        } else {
+          // Unknown media type — send as document
+          await this.sock.sendMessage(jid, {
+            document: buffer,
+            mimetype: 'application/octet-stream',
+            fileName: mediaPath.split('/').pop() || 'file',
+            caption: prefixed || undefined,
+          });
+          logger.info(
+            { jid, mediaPath, type: 'document' },
+            'Document message sent',
+          );
+        }
+      } else {
+        await this.sock.sendMessage(jid, { text: prefixed });
+        logger.info({ jid, length: prefixed.length }, 'Message sent');
+      }
     } catch (err) {
       // If send fails, queue it for retry on reconnect
       this.outgoingQueue.push({ jid, text: prefixed });
