@@ -76,6 +76,7 @@ export class WhatsAppChannel implements Channel {
   private outgoingQueue: Array<{ jid: string; text: string }> = [];
   private flushing = false;
   private groupSyncTimerStarted = false;
+  private sentAudioIds = new Set<string>();
 
   private opts: WhatsAppChannelOpts;
 
@@ -273,8 +274,19 @@ export class WhatsAppChannel implements Channel {
 
             // Voice message handling — transcribe via local whisper.cpp server
             // Skip bot's own voice messages to avoid a feedback loop
-            if (!content && normalized?.audioMessage?.ptt) {
-              if (msg.key.fromMe) continue;
+            // Check both normalized and raw message for audioMessage (normalizeMessageContent
+            // may not always preserve audioMessage in all container type wrappers)
+            const audioMsg =
+              normalized?.audioMessage || msg.message?.audioMessage;
+            if (!content && audioMsg?.ptt) {
+              // On shared number, fromMe is true for BOTH user and bot messages.
+              // Skip bot audio by checking our sent message ID set.
+              // On own number, fromMe reliably means "bot sent this".
+              if (ASSISTANT_HAS_OWN_NUMBER && msg.key.fromMe) continue;
+              if (this.sentAudioIds.has(msg.key.id || '')) {
+                this.sentAudioIds.delete(msg.key.id || '');
+                continue;
+              }
               try {
                 const audioBuffer = await downloadMediaMessage(
                   msg,
@@ -414,11 +426,15 @@ export class WhatsAppChannel implements Channel {
               );
             }
           }
-          await this.sock.sendMessage(jid, {
+          const sentAudio = await this.sock.sendMessage(jid, {
             audio: audioBuffer,
             mimetype: 'audio/ogg; codecs=opus',
             ptt: true,
           });
+          // Track sent audio ID to prevent feedback loop on shared number
+          if (sentAudio?.key?.id) {
+            this.sentAudioIds.add(sentAudio.key.id);
+          }
           logger.info({ jid, mediaPath, type: 'audio' }, 'Audio message sent');
         } else {
           // Unknown media type — send as document
