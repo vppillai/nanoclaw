@@ -23,9 +23,7 @@ import re
 import sqlite3
 import subprocess
 import sys
-import tempfile
 import threading
-import urllib.request
 from pathlib import Path
 
 # ── Globals ─────────────────────────────────────────────────────────────────
@@ -132,36 +130,6 @@ def read_env_var(env_file: Path, key: str) -> str | None:
     return None
 
 
-def apply_onecli_config(cmd: list, env_file: Path) -> None:
-    """Fetch OneCLI container config and inject proxy env/mounts into cmd."""
-    onecli_url = read_env_var(env_file, "ONECLI_URL") or os.environ.get("ONECLI_URL")
-    if not onecli_url:
-        return
-    try:
-        with urllib.request.urlopen(f"{onecli_url}/api/container-config", timeout=3) as resp:
-            config = json.loads(resp.read())
-    except Exception as e:
-        dbg(f"OneCLI not reachable: {e}")
-        return
-
-    for key, value in config.get("env", {}).items():
-        cmd.extend(["-e", f"{key}={value}"])
-
-    ca_cert = config.get("caCertificate", "")
-    ca_path = config.get("caCertificateContainerPath", "/tmp/onecli-gateway-ca.pem")
-    if ca_cert:
-        tmp = tempfile.NamedTemporaryFile(delete=False, suffix=".pem", mode="w")
-        tmp.write(ca_cert)
-        tmp.flush()
-        os.chmod(tmp.name, 0o644)
-        cmd.extend(["-v", f"{tmp.name}:{ca_path}:ro"])
-
-    if sys.platform.startswith("linux"):
-        cmd.extend(["--add-host", "host.docker.internal:host-gateway"])
-
-    dbg("OneCLI proxy config applied")
-
-
 INTEGRATION_ENV_KEYS = ["ANTHROPIC_BASE_URL", "ANTHROPIC_API_KEY", "AGENT_MODEL", "KASA_USERNAME", "KASA_PASSWORD", "MYSA_EMAIL", "MYSA_PASSWORD", "GOOGLE_SERVICE_ACCOUNT_JSON", "GOOGLE_FAMILY_CALENDAR_ID", "GOOGLE_PERSONAL_CALENDAR_ID"]
 
 def apply_integration_env(cmd: list, env_file: Path) -> None:
@@ -174,8 +142,9 @@ def apply_integration_env(cmd: list, env_file: Path) -> None:
 
 def run_container(runtime: str, image: str, payload: dict, timeout: int = 300) -> None:
     cmd = [runtime, "run", "-i", "--rm"]
-    apply_onecli_config(cmd, ENV_FILE)
     apply_integration_env(cmd, ENV_FILE)
+    if sys.platform.startswith("linux"):
+        cmd.extend(["--add-host", "host.docker.internal:host-gateway"])
     cmd.append(image)
     dbg(f"cmd: {' '.join(cmd)}")
 

@@ -13,7 +13,6 @@ import {
   DATA_DIR,
   GROUPS_DIR,
   IDLE_TIMEOUT,
-  ONECLI_URL,
   TIMEZONE,
 } from './config.js';
 import { resolveGroupFolderPath, resolveGroupIpcPath } from './group-folder.js';
@@ -24,15 +23,23 @@ import {
   readonlyMountArgs,
   stopContainer,
 } from './container-runtime.js';
-import { OneCLI } from '@onecli-sh/sdk';
 import { validateAdditionalMounts } from './mount-security.js';
 import { RegisteredGroup } from './types.js';
 import { readEnvFile } from './env.js';
 
 // Integration env vars to pass through to containers (read from .env)
-const PASSTHROUGH_ENV_KEYS = ['ANTHROPIC_BASE_URL', 'ANTHROPIC_API_KEY', 'AGENT_MODEL', 'KASA_USERNAME', 'KASA_PASSWORD', 'MYSA_EMAIL', 'MYSA_PASSWORD', 'GOOGLE_SERVICE_ACCOUNT_JSON', 'GOOGLE_FAMILY_CALENDAR_ID', 'GOOGLE_PERSONAL_CALENDAR_ID'];
-
-const onecli = new OneCLI({ url: ONECLI_URL });
+const PASSTHROUGH_ENV_KEYS = [
+  'ANTHROPIC_BASE_URL',
+  'ANTHROPIC_API_KEY',
+  'AGENT_MODEL',
+  'KASA_USERNAME',
+  'KASA_PASSWORD',
+  'MYSA_EMAIL',
+  'MYSA_PASSWORD',
+  'GOOGLE_SERVICE_ACCOUNT_JSON',
+  'GOOGLE_FAMILY_CALENDAR_ID',
+  'GOOGLE_PERSONAL_CALENDAR_ID',
+];
 
 // Sentinel markers for robust output parsing (must match agent-runner)
 const OUTPUT_START_MARKER = '---NANOCLAW_OUTPUT_START---';
@@ -54,13 +61,16 @@ export interface ContainerOutput {
   result: string | null;
   newSessionId?: string;
   error?: string;
-  modelUsage?: Record<string, {
-    inputTokens: number;
-    outputTokens: number;
-    cacheReadInputTokens: number;
-    cacheCreationInputTokens: number;
-    costUSD: number;
-  }>;
+  modelUsage?: Record<
+    string,
+    {
+      inputTokens: number;
+      outputTokens: number;
+      cacheReadInputTokens: number;
+      cacheCreationInputTokens: number;
+      costUSD: number;
+    }
+  >;
 }
 
 interface VolumeMount {
@@ -90,7 +100,7 @@ function buildVolumeMounts(
     });
 
     // Shadow .env so the agent cannot read secrets from the mounted project root.
-    // Credentials are injected by the OneCLI gateway, never exposed to containers.
+    // Credentials are passed via explicit -e flags from PASSTHROUGH_ENV_KEYS.
     const envFile = path.join(projectRoot, '.env');
     if (fs.existsSync(envFile)) {
       mounts.push({
@@ -234,32 +244,16 @@ function buildVolumeMounts(
   return mounts;
 }
 
-async function buildContainerArgs(
+function buildContainerArgs(
   mounts: VolumeMount[],
   containerName: string,
-  agentIdentifier?: string,
-): Promise<string[]> {
+): string[] {
   const args: string[] = ['run', '-i', '--rm', '--name', containerName];
 
   // Pass host timezone so container's local time matches the user's
   args.push('-e', `TZ=${TIMEZONE}`);
 
-  // OneCLI gateway handles credential injection — containers never see real secrets.
-  // The gateway intercepts HTTPS traffic and injects API keys or OAuth tokens.
-  const onecliApplied = await onecli.applyContainerConfig(args, {
-    addHostMapping: false, // Nanoclaw already handles host gateway
-    agent: agentIdentifier,
-  });
-  if (onecliApplied) {
-    logger.info({ containerName }, 'OneCLI gateway config applied');
-  } else {
-    logger.warn(
-      { containerName },
-      'OneCLI gateway not reachable — container will have no credentials',
-    );
-  }
-
-  // Pass integration env vars (e.g. KASA_USERNAME) from .env into the container
+  // Pass env vars from .env into the container (API keys, integrations)
   const integrationEnv = readEnvFile(PASSTHROUGH_ENV_KEYS);
   for (const [key, value] of Object.entries(integrationEnv)) {
     args.push('-e', `${key}=${value}`);
@@ -305,15 +299,7 @@ export async function runContainerAgent(
   const mounts = buildVolumeMounts(group, input.isMain);
   const safeName = group.folder.replace(/[^a-zA-Z0-9-]/g, '-');
   const containerName = `nanoclaw-${safeName}-${Date.now()}`;
-  // Main group uses the default OneCLI agent; others use their own agent.
-  const agentIdentifier = input.isMain
-    ? undefined
-    : group.folder.toLowerCase().replace(/_/g, '-');
-  const containerArgs = await buildContainerArgs(
-    mounts,
-    containerName,
-    agentIdentifier,
-  );
+  const containerArgs = buildContainerArgs(mounts, containerName);
 
   logger.debug(
     {
@@ -754,13 +740,36 @@ export function writeGroupsSnapshot(
 
 export function writeUsageSnapshot(
   groupFolder: string,
-  summary: { byModel: Record<string, { model: string; inputTokens: number; outputTokens: number; cacheReadTokens: number; cacheWriteTokens: number; costUSD: number }>; totalCostUSD: number; periodDays: number },
-  byDay: Array<{ date: string; costUSD: number; inputTokens: number; outputTokens: number }>,
+  summary: {
+    byModel: Record<
+      string,
+      {
+        model: string;
+        inputTokens: number;
+        outputTokens: number;
+        cacheReadTokens: number;
+        cacheWriteTokens: number;
+        costUSD: number;
+      }
+    >;
+    totalCostUSD: number;
+    periodDays: number;
+  },
+  byDay: Array<{
+    date: string;
+    costUSD: number;
+    inputTokens: number;
+    outputTokens: number;
+  }>,
 ): void {
   const groupIpcDir = resolveGroupIpcPath(groupFolder);
   fs.mkdirSync(groupIpcDir, { recursive: true });
   fs.writeFileSync(
     path.join(groupIpcDir, 'usage_summary.json'),
-    JSON.stringify({ summary, byDay, updatedAt: new Date().toISOString() }, null, 2),
+    JSON.stringify(
+      { summary, byDay, updatedAt: new Date().toISOString() },
+      null,
+      2,
+    ),
   );
 }

@@ -677,7 +677,16 @@ export interface UsageEntry {
 
 export function logUsage(
   groupFolder: string,
-  modelUsage: Record<string, { inputTokens: number; outputTokens: number; cacheReadInputTokens: number; cacheCreationInputTokens: number; costUSD: number }>,
+  modelUsage: Record<
+    string,
+    {
+      inputTokens: number;
+      outputTokens: number;
+      cacheReadInputTokens: number;
+      cacheCreationInputTokens: number;
+      costUSD: number;
+    }
+  >,
 ): void {
   const now = new Date().toISOString();
   const insert = db.prepare(
@@ -685,14 +694,28 @@ export function logUsage(
      VALUES (?, ?, ?, ?, ?, ?, ?, ?)`,
   );
   for (const [model, u] of Object.entries(modelUsage)) {
-    insert.run(now, groupFolder, model, u.inputTokens, u.outputTokens, u.cacheReadInputTokens, u.cacheCreationInputTokens, u.costUSD);
+    insert.run(
+      now,
+      groupFolder,
+      model,
+      u.inputTokens,
+      u.outputTokens,
+      u.cacheReadInputTokens,
+      u.cacheCreationInputTokens,
+      u.costUSD,
+    );
   }
 }
 
-export function getUsageSummary(sinceDays: number = 30): { byModel: Record<string, UsageEntry>; totalCostUSD: number; periodDays: number } {
+export function getUsageSummary(sinceDays: number = 30): {
+  byModel: Record<string, UsageEntry>;
+  totalCostUSD: number;
+  periodDays: number;
+} {
   const since = new Date(Date.now() - sinceDays * 86400_000).toISOString();
-  const rows = db.prepare(
-    `SELECT model,
+  const rows = db
+    .prepare(
+      `SELECT model,
        SUM(input_tokens) AS input_tokens,
        SUM(output_tokens) AS output_tokens,
        SUM(cache_read_tokens) AS cache_read_tokens,
@@ -700,27 +723,56 @@ export function getUsageSummary(sinceDays: number = 30): { byModel: Record<strin
        SUM(cost_usd) AS cost_usd
      FROM usage_logs WHERE logged_at >= ?
      GROUP BY model ORDER BY cost_usd DESC`,
-  ).all(since) as Array<{ model: string; input_tokens: number; output_tokens: number; cache_read_tokens: number; cache_write_tokens: number; cost_usd: number }>;
+    )
+    .all(since) as Array<{
+    model: string;
+    input_tokens: number;
+    output_tokens: number;
+    cache_read_tokens: number;
+    cache_write_tokens: number;
+    cost_usd: number;
+  }>;
 
   const byModel: Record<string, UsageEntry> = {};
   let totalCostUSD = 0;
   for (const r of rows) {
-    byModel[r.model] = { model: r.model, inputTokens: r.input_tokens, outputTokens: r.output_tokens, cacheReadTokens: r.cache_read_tokens, cacheWriteTokens: r.cache_write_tokens, costUSD: r.cost_usd };
+    byModel[r.model] = {
+      model: r.model,
+      inputTokens: r.input_tokens,
+      outputTokens: r.output_tokens,
+      cacheReadTokens: r.cache_read_tokens,
+      cacheWriteTokens: r.cache_write_tokens,
+      costUSD: r.cost_usd,
+    };
     totalCostUSD += r.cost_usd;
   }
   return { byModel, totalCostUSD, periodDays: sinceDays };
 }
 
-export function getUsageByDay(sinceDays: number = 7): Array<{ date: string; costUSD: number; inputTokens: number; outputTokens: number }> {
+export function getUsageByDay(
+  sinceDays: number = 7,
+): Array<{
+  date: string;
+  costUSD: number;
+  inputTokens: number;
+  outputTokens: number;
+}> {
   const since = new Date(Date.now() - sinceDays * 86400_000).toISOString();
-  return db.prepare(
-    `SELECT substr(logged_at, 1, 10) AS date,
+  return db
+    .prepare(
+      `SELECT substr(logged_at, 1, 10) AS date,
        SUM(cost_usd) AS costUSD,
        SUM(input_tokens) AS inputTokens,
        SUM(output_tokens) AS outputTokens
      FROM usage_logs WHERE logged_at >= ?
      GROUP BY date ORDER BY date`,
-  ).all(since) as Array<{ date: string; costUSD: number; inputTokens: number; outputTokens: number }>;
+    )
+    .all(since) as Array<{
+    date: string;
+    costUSD: number;
+    inputTokens: number;
+    outputTokens: number;
+  }>;
 }
 
 // --- JSON migration ---
