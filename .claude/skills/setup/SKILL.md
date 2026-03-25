@@ -90,6 +90,49 @@ Ensure `.env` has the OneCLI URL (create the file if it doesn't exist):
 grep -q 'ONECLI_URL' .env 2>/dev/null || echo 'ONECLI_URL=http://127.0.0.1:10254' >> .env
 ```
 
+## 1b. Host Prerequisites (Linux)
+
+On Linux (Raspberry Pi, VPS), install system packages required by the host process and container skills:
+
+```bash
+sudo apt-get update && sudo apt-get install -y ffmpeg jq xxd
+```
+
+| Package | Purpose |
+|---------|---------|
+| `ffmpeg` | Convert TTS audio (MP3→OGG/Opus) for WhatsApp voice notes |
+| `jq` | JSON processing in container skills (image-gen, tts) |
+| `xxd` | Hex-to-binary decoding for TTS audio data |
+
+On macOS, these are either pre-installed or available via `brew install ffmpeg jq`.
+
+Verify: `ffmpeg -version && jq --version && which xxd` — all three must be available.
+
+## 1c. Maintenance Cron Jobs
+
+Set up automated cleanup and maintenance cron jobs. These keep the system healthy across reboots and prevent disk usage from growing unbounded.
+
+Check if cron jobs already exist:
+```bash
+crontab -l 2>/dev/null | grep -c nanoclaw
+```
+
+If 0 (no existing NanoClaw cron entries), install them:
+
+```bash
+(crontab -l 2>/dev/null
+echo '# NanoClaw: purge attachments and logs older than 7 days (weekly, Sun 4am)'
+echo '0 4 * * 0 find /opt/nanoclaw/nanoclaw/groups/*/attachments/ -type f -mtime +7 -delete 2>/dev/null'
+echo '0 4 * * 0 find /opt/nanoclaw/nanoclaw/groups/*/logs/ -type f -mtime +7 -delete 2>/dev/null'
+echo '# NanoClaw: weekly docker cleanup (Sun 3am)'
+echo '0 3 * * 0 docker system prune -f --filter "until=168h" >> /tmp/docker-prune.log 2>&1'
+) | crontab -
+```
+
+**Note:** Adjust paths if NanoClaw is installed somewhere other than `/opt/nanoclaw/nanoclaw`. The `find` paths use the actual `GROUPS_DIR` from the installation.
+
+Verify: `crontab -l | grep nanoclaw` should show the cleanup entries.
+
 ## 2. Check Environment
 
 Run `npx tsx setup/index.ts --step environment` and parse the status block.

@@ -27,11 +27,13 @@ NanoClaw provides that same core functionality, but in a codebase small enough t
 For headless deployment without Claude Code (e.g. Raspberry Pi, VPS):
 
 ```bash
-# Prerequisites: Node.js 24+, Docker, git
+# Prerequisites
+sudo apt-get update && sudo apt-get install -y \
+  nodejs npm git docker.io ffmpeg jq xxd
+
+# Clone and configure
 git clone https://github.com/<your-username>/nanoclaw.git
 cd nanoclaw
-
-# Configure
 cp .env.example .env
 # Edit .env — set ANTHROPIC_API_KEY and ANTHROPIC_BASE_URL at minimum
 
@@ -43,6 +45,20 @@ npm run build
 # Run
 node dist/index.js
 ```
+
+<details>
+<summary>Host prerequisites</summary>
+
+| Package | Required by | Purpose |
+|---------|-------------|---------|
+| `nodejs` (20+) | NanoClaw | Runtime |
+| `docker.io` | Container agents | Agent sandbox isolation |
+| `ffmpeg` | WhatsApp voice notes | Convert TTS audio (MP3) to OGG/Opus for playback |
+| `jq` | Container skills | JSON processing in image-gen and tts scripts |
+| `xxd` | Container skills | Hex-to-binary decoding for TTS audio |
+| `git` | Setup, updates | Version control |
+
+</details>
 
 <details>
 <summary>Systemd service (auto-start on boot)</summary>
@@ -188,10 +204,12 @@ Skills we'd like to see:
 
 ## Requirements
 
-- macOS or Linux
+- macOS or Linux (including Raspberry Pi)
 - Node.js 20+
 - [Claude Code](https://claude.ai/download)
 - [Apple Container](https://github.com/apple/container) (macOS) or [Docker](https://docker.com/products/docker-desktop) (macOS/Linux)
+- `ffmpeg` (host — for WhatsApp voice note conversion)
+- `jq`, `xxd` (container — installed via Dockerfile, also useful on host)
 
 ## Architecture
 
