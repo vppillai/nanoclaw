@@ -590,17 +590,25 @@ describe('TelegramChannel', () => {
       );
     });
 
-    it('stores voice message with placeholder', async () => {
+    it('transcribes voice message or falls back to placeholder', async () => {
       const opts = createTestOpts();
       const channel = new TelegramChannel('test-token', opts);
       await channel.connect();
 
-      const ctx = createMediaCtx({});
+      const ctx = createMediaCtx({}) as any;
+      ctx.getFile = vi.fn().mockRejectedValue(new Error('no file'));
       await triggerMediaMessage('message:voice', ctx);
+
+      // Wait for async transcription attempt
+      await new Promise((r) => setTimeout(r, 500));
 
       expect(opts.onMessage).toHaveBeenCalledWith(
         'tg:100200300',
-        expect.objectContaining({ content: '[Voice message]' }),
+        expect.objectContaining({
+          content: expect.stringMatching(
+            /^\[Voice: .+\]$|\[Voice message received - transcription (unavailable|failed)\]$/,
+          ),
+        }),
       );
     });
 
