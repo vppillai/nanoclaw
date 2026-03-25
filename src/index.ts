@@ -8,6 +8,7 @@ import {
   GROUPS_DIR,
   IDLE_TIMEOUT,
   POLL_INTERVAL,
+  TELEGRAM_BOT_POOL,
   TIMEZONE,
 } from './config.js';
 import './channels/index.js';
@@ -621,6 +622,12 @@ async function main(): Promise<void> {
   if (channels.length === 0) {
     logger.fatal('No channels connected');
     process.exit(1);
+  }
+
+  // Initialize Telegram bot pool for agent swarm (if configured)
+  if (TELEGRAM_BOT_POOL.length > 0) {
+    const { initBotPool } = await import('./channels/telegram.js');
+    await initBotPool(TELEGRAM_BOT_POOL);
   }
 
   // Start subsystems (independently of connection handler)

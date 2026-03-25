@@ -74,6 +74,17 @@ export function getTriggerPattern(trigger?: string): RegExp {
 
 export const TRIGGER_PATTERN = buildTriggerPattern(DEFAULT_TRIGGER);
 
+// Telegram bot pool for agent swarm — comma-separated tokens
+const poolEnv = readEnvFile(['TELEGRAM_BOT_POOL']);
+export const TELEGRAM_BOT_POOL = (
+  process.env.TELEGRAM_BOT_POOL ||
+  poolEnv.TELEGRAM_BOT_POOL ||
+  ''
+)
+  .split(',')
+  .map((t) => t.trim())
+  .filter(Boolean);
+
 // Timezone for scheduled tasks, message formatting, etc.
 // Validates each candidate is a real IANA identifier before accepting.
 function resolveConfigTimezone(): string {
