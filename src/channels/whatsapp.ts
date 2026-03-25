@@ -242,7 +242,9 @@ export class WhatsAppChannel implements Channel {
             }
 
             // Voice message handling — deliver as placeholder since no STT is available
+            // Skip bot's own voice messages to avoid a feedback loop
             if (!content && normalized?.audioMessage?.ptt) {
+              if (msg.key.fromMe) continue;
               content =
                 '[Voice message received - audio transcription not available]';
             }
@@ -369,10 +371,6 @@ export class WhatsAppChannel implements Channel {
             ptt: true,
           });
           logger.info({ jid, mediaPath, type: 'audio' }, 'Audio message sent');
-          // Send caption as separate text if present
-          if (prefixed) {
-            await this.sock.sendMessage(jid, { text: prefixed });
-          }
         } else {
           // Unknown media type — send as document
           await this.sock.sendMessage(jid, {
