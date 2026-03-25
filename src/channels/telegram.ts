@@ -1,4 +1,6 @@
+import fs from 'fs';
 import https from 'https';
+import { InputFile } from 'grammy';
 import { Api, Bot } from 'grammy';
 
 import { ASSISTANT_NAME, TRIGGER_PATTERN } from '../config.js';
@@ -75,8 +77,9 @@ export class TelegramChannel implements Channel {
       );
     });
 
-    // Command to check bot status
+    // Command to check bot status (registered chats only)
     this.bot.command('ping', (ctx) => {
+      if (!this.opts.registeredGroups()[`tg:${ctx.chat.id}`]) return;
       ctx.reply(`${ASSISTANT_NAME} is online.`);
     });
 
@@ -85,12 +88,14 @@ export class TelegramChannel implements Channel {
     const TELEGRAM_BOT_COMMANDS = new Set(['chatid', 'ping']);
 
     this.bot.on('message:text', async (ctx) => {
+      // Only allow messages from registered chat owners
+      const chatJid = `tg:${ctx.chat.id}`;
+      if (!this.opts.registeredGroups()[chatJid]) return;
+
       if (ctx.message.text.startsWith('/')) {
         const cmd = ctx.message.text.slice(1).split(/[\s@]/)[0].toLowerCase();
         if (TELEGRAM_BOT_COMMANDS.has(cmd)) return;
       }
-
-      const chatJid = `tg:${ctx.chat.id}`;
       let content = ctx.message.text;
       const timestamp = new Date(ctx.message.date * 1000).toISOString();
       const senderName =
@@ -242,7 +247,7 @@ export class TelegramChannel implements Channel {
   async sendMessage(
     jid: string,
     text: string,
-    threadId?: string,
+    mediaPath?: string,
   ): Promise<void> {
     if (!this.bot) {
       logger.warn('Telegram bot not initialized');
@@ -251,26 +256,46 @@ export class TelegramChannel implements Channel {
 
     try {
       const numericId = jid.replace(/^tg:/, '');
-      const options = threadId
-        ? { message_thread_id: parseInt(threadId, 10) }
-        : {};
+
+      // Send media file if provided
+      if (mediaPath && fs.existsSync(mediaPath)) {
+        const ext = mediaPath.split('.').pop()?.toLowerCase();
+        const file = new InputFile(mediaPath);
+        if (ext === 'jpg' || ext === 'jpeg' || ext === 'png' || ext === 'webp') {
+          await this.bot.api.sendPhoto(numericId, file, {
+            caption: text || undefined,
+          });
+          logger.info({ jid, mediaPath, type: 'photo' }, 'Telegram photo sent');
+        } else if (ext === 'mp3' || ext === 'ogg' || ext === 'wav' || ext === 'opus') {
+          await this.bot.api.sendVoice(numericId, file, {
+            caption: text || undefined,
+          });
+          logger.info({ jid, mediaPath, type: 'voice' }, 'Telegram voice sent');
+        } else {
+          await this.bot.api.sendDocument(numericId, file, {
+            caption: text || undefined,
+          });
+          logger.info({ jid, mediaPath, type: 'document' }, 'Telegram document sent');
+        }
+        return;
+      }
 
       // Telegram has a 4096 character limit per message — split if needed
       const MAX_LENGTH = 4096;
       if (text.length <= MAX_LENGTH) {
-        await sendTelegramMessage(this.bot.api, numericId, text, options);
+        await sendTelegramMessage(this.bot.api, numericId, text, {});
       } else {
         for (let i = 0; i < text.length; i += MAX_LENGTH) {
           await sendTelegramMessage(
             this.bot.api,
             numericId,
             text.slice(i, i + MAX_LENGTH),
-            options,
+            {},
           );
         }
       }
       logger.info(
-        { jid, length: text.length, threadId },
+        { jid, length: text.length },
         'Telegram message sent',
       );
     } catch (err) {
