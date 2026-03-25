@@ -27,6 +27,10 @@ import {
 import { OneCLI } from '@onecli-sh/sdk';
 import { validateAdditionalMounts } from './mount-security.js';
 import { RegisteredGroup } from './types.js';
+import { readEnvFile } from './env.js';
+
+// Integration env vars to pass through to containers (read from .env)
+const PASSTHROUGH_ENV_KEYS = ['ANTHROPIC_BASE_URL', 'KASA_USERNAME', 'KASA_PASSWORD', 'MYSA_EMAIL', 'MYSA_PASSWORD', 'GOOGLE_SERVICE_ACCOUNT_JSON', 'GOOGLE_FAMILY_CALENDAR_ID', 'GOOGLE_PERSONAL_CALENDAR_ID'];
 
 const onecli = new OneCLI({ url: ONECLI_URL });
 
@@ -49,6 +53,13 @@ export interface ContainerOutput {
   result: string | null;
   newSessionId?: string;
   error?: string;
+  modelUsage?: Record<string, {
+    inputTokens: number;
+    outputTokens: number;
+    cacheReadInputTokens: number;
+    cacheCreationInputTokens: number;
+    costUSD: number;
+  }>;
 }
 
 interface VolumeMount {
@@ -236,6 +247,12 @@ async function buildContainerArgs(
       { containerName },
       'OneCLI gateway not reachable — container will have no credentials',
     );
+  }
+
+  // Pass integration env vars (e.g. KASA_USERNAME) from .env into the container
+  const integrationEnv = readEnvFile(PASSTHROUGH_ENV_KEYS);
+  for (const [key, value] of Object.entries(integrationEnv)) {
+    args.push('-e', `${key}=${value}`);
   }
 
   // Runtime-specific args for host gateway resolution
@@ -721,5 +738,18 @@ export function writeGroupsSnapshot(
       null,
       2,
     ),
+  );
+}
+
+export function writeUsageSnapshot(
+  groupFolder: string,
+  summary: { byModel: Record<string, { model: string; inputTokens: number; outputTokens: number; cacheReadTokens: number; cacheWriteTokens: number; costUSD: number }>; totalCostUSD: number; periodDays: number },
+  byDay: Array<{ date: string; costUSD: number; inputTokens: number; outputTokens: number }>,
+): void {
+  const groupIpcDir = resolveGroupIpcPath(groupFolder);
+  fs.mkdirSync(groupIpcDir, { recursive: true });
+  fs.writeFileSync(
+    path.join(groupIpcDir, 'usage_summary.json'),
+    JSON.stringify({ summary, byDay, updatedAt: new Date().toISOString() }, null, 2),
   );
 }

@@ -20,7 +20,6 @@ groups/global/*
 
 # Secrets
 *.keys.json
-.env
 
 # Temp files
 .tmp-*
@@ -36,3 +35,4 @@ groups/global/*
 .nanoclaw/
 
 agents-sdk-docs
+.git-crypt-key

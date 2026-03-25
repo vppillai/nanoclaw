@@ -34,6 +34,13 @@ interface ContainerOutput {
   result: string | null;
   newSessionId?: string;
   error?: string;
+  modelUsage?: Record<string, {
+    inputTokens: number;
+    outputTokens: number;
+    cacheReadInputTokens: number;
+    cacheCreationInputTokens: number;
+    costUSD: number;
+  }>;
 }
 
 interface SessionEntry {
@@ -366,11 +373,22 @@ async function runQuery(
   let messageCount = 0;
   let resultCount = 0;
 
-  // Load global CLAUDE.md as additional system context (shared across all groups)
+  // Load CLAUDE.md for system context:
+  // - Group's own CLAUDE.md (at /workspace/group/CLAUDE.md) for all groups
+  // - Global CLAUDE.md (at /workspace/global/CLAUDE.md) for non-main groups
+  const groupClaudeMdPath = '/workspace/group/CLAUDE.md';
   const globalClaudeMdPath = '/workspace/global/CLAUDE.md';
   let globalClaudeMd: string | undefined;
+
+  const parts: string[] = [];
   if (!containerInput.isMain && fs.existsSync(globalClaudeMdPath)) {
-    globalClaudeMd = fs.readFileSync(globalClaudeMdPath, 'utf-8');
+    parts.push(fs.readFileSync(globalClaudeMdPath, 'utf-8'));
+  }
+  if (fs.existsSync(groupClaudeMdPath)) {
+    parts.push(fs.readFileSync(groupClaudeMdPath, 'utf-8'));
+  }
+  if (parts.length > 0) {
+    globalClaudeMd = parts.join('\n\n');
   }
 
   // Discover additional directories mounted at /workspace/extra/*
@@ -392,6 +410,7 @@ async function runQuery(
   for await (const message of query({
     prompt: stream,
     options: {
+      model: 'MiniMax-M2.7-highspeed',
       cwd: '/workspace/group',
       additionalDirectories: extraDirs.length > 0 ? extraDirs : undefined,
       resume: sessionId,
@@ -407,7 +426,10 @@ async function runQuery(
         'TeamCreate', 'TeamDelete', 'SendMessage',
         'TodoWrite', 'ToolSearch', 'Skill',
         'NotebookEdit',
-        'mcp__nanoclaw__*'
+        'mcp__nanoclaw__*',
+        'mcp__kasa__*',
+        'mcp__mysa__*',
+        'mcp__gcal__*',
       ],
       env: sdkEnv,
       permissionMode: 'bypassPermissions',
@@ -423,6 +445,45 @@ async function runQuery(
             NANOCLAW_IS_MAIN: containerInput.isMain ? '1' : '0',
           },
         },
+        ...(process.env.KASA_USERNAME && process.env.KASA_PASSWORD
+          ? {
+              kasa: {
+                command: 'node',
+                args: [path.join(path.dirname(mcpServerPath), 'kasa-mcp.js')],
+                env: {
+                  KASA_USERNAME: process.env.KASA_USERNAME,
+                  KASA_PASSWORD: process.env.KASA_PASSWORD,
+                },
+              },
+            }
+          : {}),
+        ...(process.env.MYSA_EMAIL && process.env.MYSA_PASSWORD
+          ? {
+              mysa: {
+                command: 'node',
+                args: [path.join(path.dirname(mcpServerPath), 'mysa-mcp.js')],
+                env: {
+                  MYSA_EMAIL: process.env.MYSA_EMAIL,
+                  MYSA_PASSWORD: process.env.MYSA_PASSWORD,
+                },
+              },
+            }
+          : {}),
+        ...(process.env.GOOGLE_SERVICE_ACCOUNT_JSON
+          ? {
+              gcal: {
+                command: 'node',
+                args: [path.join(path.dirname(mcpServerPath), 'gcal-mcp.js')],
+                env: {
+                  GOOGLE_SERVICE_ACCOUNT_JSON: process.env.GOOGLE_SERVICE_ACCOUNT_JSON,
+                  GOOGLE_FAMILY_CALENDAR_ID: process.env.GOOGLE_FAMILY_CALENDAR_ID || 'primary',
+                  ...(process.env.GOOGLE_PERSONAL_CALENDAR_ID
+                    ? { GOOGLE_PERSONAL_CALENDAR_ID: process.env.GOOGLE_PERSONAL_CALENDAR_ID }
+                    : {}),
+                },
+              },
+            }
+          : {}),
       },
       hooks: {
         PreCompact: [{ hooks: [createPreCompactHook(containerInput.assistantName)] }],
@@ -449,12 +510,14 @@ async function runQuery(
 
     if (message.type === 'result') {
       resultCount++;
-      const textResult = 'result' in message ? (message as { result?: string }).result : null;
+      const r = message as { result?: string; modelUsage?: Record<string, { inputTokens: number; outputTokens: number; cacheReadInputTokens: number; cacheCreationInputTokens: number; costUSD: number }> };
+      const textResult = r.result ?? null;
       log(`Result #${resultCount}: subtype=${message.subtype}${textResult ? ` text=${textResult.slice(0, 200)}` : ''}`);
       writeOutput({
         status: 'success',
-        result: textResult || null,
-        newSessionId
+        result: textResult,
+        newSessionId,
+        modelUsage: r.modelUsage,
       });
     }
   }

@@ -21,6 +21,7 @@ import {
   runContainerAgent,
   writeGroupsSnapshot,
   writeTasksSnapshot,
+  writeUsageSnapshot,
 } from './container-runner.js';
 import {
   cleanupOrphans,
@@ -34,7 +35,10 @@ import {
   getMessagesSince,
   getNewMessages,
   getRouterState,
+  getUsageByDay,
+  getUsageSummary,
   initDatabase,
+  logUsage,
   setRegisteredGroup,
   setRouterState,
   setSession,
@@ -328,6 +332,12 @@ async function runAgent(
         if (output.newSessionId) {
           sessions[group.folder] = output.newSessionId;
           setSession(group.folder, output.newSessionId);
+        }
+        if (output.modelUsage && Object.keys(output.modelUsage).length > 0) {
+          logUsage(group.folder, output.modelUsage);
+          const summary = getUsageSummary(30);
+          const byDay = getUsageByDay(7);
+          writeUsageSnapshot(group.folder, summary, byDay);
         }
         await onOutput(output);
       }

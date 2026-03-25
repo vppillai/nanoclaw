@@ -82,6 +82,19 @@ function createSchema(database: Database.Database): void {
       container_config TEXT,
       requires_trigger INTEGER DEFAULT 1
     );
+    CREATE TABLE IF NOT EXISTS usage_logs (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      logged_at TEXT NOT NULL,
+      group_folder TEXT NOT NULL,
+      model TEXT NOT NULL,
+      input_tokens INTEGER NOT NULL DEFAULT 0,
+      output_tokens INTEGER NOT NULL DEFAULT 0,
+      cache_read_tokens INTEGER NOT NULL DEFAULT 0,
+      cache_write_tokens INTEGER NOT NULL DEFAULT 0,
+      cost_usd REAL NOT NULL DEFAULT 0
+    );
+    CREATE INDEX IF NOT EXISTS idx_usage_logged_at ON usage_logs(logged_at);
+    CREATE INDEX IF NOT EXISTS idx_usage_group ON usage_logs(group_folder, logged_at);
   `);
 
   // Add context_mode column if it doesn't exist (migration for existing DBs)
@@ -632,6 +645,65 @@ export function getAllRegisteredGroups(): Record<string, RegisteredGroup> {
     };
   }
   return result;
+}
+
+// --- Usage tracking ---
+
+export interface UsageEntry {
+  model: string;
+  inputTokens: number;
+  outputTokens: number;
+  cacheReadTokens: number;
+  cacheWriteTokens: number;
+  costUSD: number;
+}
+
+export function logUsage(
+  groupFolder: string,
+  modelUsage: Record<string, { inputTokens: number; outputTokens: number; cacheReadInputTokens: number; cacheCreationInputTokens: number; costUSD: number }>,
+): void {
+  const now = new Date().toISOString();
+  const insert = db.prepare(
+    `INSERT INTO usage_logs (logged_at, group_folder, model, input_tokens, output_tokens, cache_read_tokens, cache_write_tokens, cost_usd)
+     VALUES (?, ?, ?, ?, ?, ?, ?, ?)`,
+  );
+  for (const [model, u] of Object.entries(modelUsage)) {
+    insert.run(now, groupFolder, model, u.inputTokens, u.outputTokens, u.cacheReadInputTokens, u.cacheCreationInputTokens, u.costUSD);
+  }
+}
+
+export function getUsageSummary(sinceDays: number = 30): { byModel: Record<string, UsageEntry>; totalCostUSD: number; periodDays: number } {
+  const since = new Date(Date.now() - sinceDays * 86400_000).toISOString();
+  const rows = db.prepare(
+    `SELECT model,
+       SUM(input_tokens) AS input_tokens,
+       SUM(output_tokens) AS output_tokens,
+       SUM(cache_read_tokens) AS cache_read_tokens,
+       SUM(cache_write_tokens) AS cache_write_tokens,
+       SUM(cost_usd) AS cost_usd
+     FROM usage_logs WHERE logged_at >= ?
+     GROUP BY model ORDER BY cost_usd DESC`,
+  ).all(since) as Array<{ model: string; input_tokens: number; output_tokens: number; cache_read_tokens: number; cache_write_tokens: number; cost_usd: number }>;
+
+  const byModel: Record<string, UsageEntry> = {};
+  let totalCostUSD = 0;
+  for (const r of rows) {
+    byModel[r.model] = { model: r.model, inputTokens: r.input_tokens, outputTokens: r.output_tokens, cacheReadTokens: r.cache_read_tokens, cacheWriteTokens: r.cache_write_tokens, costUSD: r.cost_usd };
+    totalCostUSD += r.cost_usd;
+  }
+  return { byModel, totalCostUSD, periodDays: sinceDays };
+}
+
+export function getUsageByDay(sinceDays: number = 7): Array<{ date: string; costUSD: number; inputTokens: number; outputTokens: number }> {
+  const since = new Date(Date.now() - sinceDays * 86400_000).toISOString();
+  return db.prepare(
+    `SELECT substr(logged_at, 1, 10) AS date,
+       SUM(cost_usd) AS costUSD,
+       SUM(input_tokens) AS inputTokens,
+       SUM(output_tokens) AS outputTokens
+     FROM usage_logs WHERE logged_at >= ?
+     GROUP BY date ORDER BY date`,
+  ).all(since) as Array<{ date: string; costUSD: number; inputTokens: number; outputTokens: number }>;
 }
 
 // --- JSON migration ---
