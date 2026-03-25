@@ -50,7 +50,7 @@ Already configured. Continue.
 
 **Verify:** `git remote -v` should show `origin` → user's repo, `upstream` → `qwibitai/nanoclaw.git`.
 
-## 1. Bootstrap (Node.js + Dependencies + OneCLI)
+## 1. Bootstrap (Node.js + Dependencies)
 
 Run `bash setup.sh` and parse the status block.
 
@@ -61,34 +61,6 @@ Run `bash setup.sh` and parse the status block.
 - If DEPS_OK=false → Read `logs/setup.log`. Try: delete `node_modules`, re-run `bash setup.sh`. If native module build fails, install build tools (`xcode-select --install` on macOS, `build-essential` on Linux), then retry.
 - If NATIVE_OK=false → better-sqlite3 failed to load. Install build tools and re-run.
 - Record PLATFORM and IS_WSL for later steps.
-
-After bootstrap succeeds, install OneCLI and its CLI tool:
-
-```bash
-curl -fsSL onecli.sh/install | sh
-curl -fsSL onecli.sh/cli/install | sh
-```
-
-Verify both installed: `onecli version`. If the command is not found, the CLI was likely installed to `~/.local/bin/`. Add it to PATH for the current session and persist it:
-
-```bash
-export PATH="$HOME/.local/bin:$PATH"
-# Persist for future sessions (append to shell profile if not already present)
-grep -q '.local/bin' ~/.bashrc 2>/dev/null || echo 'export PATH="$HOME/.local/bin:$PATH"' >> ~/.bashrc
-grep -q '.local/bin' ~/.zshrc 2>/dev/null || echo 'export PATH="$HOME/.local/bin:$PATH"' >> ~/.zshrc
-```
-
-Then re-verify with `onecli version`.
-
-Point the CLI at the local OneCLI instance (it defaults to the cloud service otherwise):
-```bash
-onecli config set api-host http://127.0.0.1:10254
-```
-
-Ensure `.env` has the OneCLI URL (create the file if it doesn't exist):
-```bash
-grep -q 'ONECLI_URL' .env 2>/dev/null || echo 'ONECLI_URL=http://127.0.0.1:10254' >> .env
-```
 
 ## 2. Check Environment
 
@@ -147,47 +119,68 @@ Run `npx tsx setup/index.ts --step container -- --runtime <chosen>` and parse th
 
 **If TEST_OK=false but BUILD_OK=true:** The image built but won't run. Check logs — common cause is runtime not fully started. Wait a moment and retry the test.
 
-## 4. Anthropic Credentials via OneCLI
+## 4. Anthropic Credentials
 
-NanoClaw uses OneCLI to manage credentials — API keys are never stored in `.env` or exposed to containers. The OneCLI gateway injects them at request time.
+Credentials are stored in `.env` (encrypted with git-crypt if configured) and passed to containers via environment variables. The `.env` file is shadowed inside containers so agents cannot read it directly.
 
-Check if a secret already exists:
+Check if `.env` already has credentials:
 ```bash
-onecli secrets list
+grep -q 'ANTHROPIC_API_KEY' .env 2>/dev/null && echo "KEY_EXISTS" || echo "KEY_MISSING"
+grep -q 'ANTHROPIC_BASE_URL' .env 2>/dev/null && echo "URL_EXISTS" || echo "URL_MISSING"
 ```
 
-If an Anthropic secret is listed, confirm with user: keep or reconfigure? If keeping, skip to step 5.
+If both exist, confirm with user: keep or reconfigure? If keeping, skip to step 5.
 
-AskUserQuestion: Do you want to use your **Claude subscription** (Pro/Max) or an **Anthropic API key**?
+AskUserQuestion: How do you want to connect to Claude?
 
-1. **Claude subscription (Pro/Max)** — description: "Uses your existing Claude Pro or Max subscription. You'll run `claude setup-token` in another terminal to get your token."
-2. **Anthropic API key** — description: "Pay-per-use API key from console.anthropic.com."
-
-### Subscription path
-
-Tell the user to run `claude setup-token` in another terminal and copy the token it outputs. Do NOT collect the token in chat.
-
-Once they have the token, they register it with OneCLI. AskUserQuestion with two options:
-
-1. **Dashboard** — description: "Best if you have a browser on this machine. Open http://127.0.0.1:10254 and add the secret in the UI. Use type 'anthropic' and paste your token as the value."
-2. **CLI** — description: "Best for remote/headless servers. Run: `onecli secrets create --name Anthropic --type anthropic --value YOUR_TOKEN --host-pattern api.anthropic.com`"
+1. **Anthropic API key** — description: "Pay-per-use API key from console.anthropic.com. Set ANTHROPIC_BASE_URL=https://api.anthropic.com"
+2. **Third-party provider** — description: "Use a compatible API endpoint (e.g. MiniMax, AWS Bedrock). You'll provide the base URL and API key."
 
 ### API key path
 
 Tell the user to get an API key from https://console.anthropic.com/settings/keys if they don't have one.
 
-Then AskUserQuestion with two options:
+Once they provide the key, write it to `.env`:
+```bash
+# Create .env from example if it doesn't exist
+[ -f .env ] || cp .env.example .env
 
-1. **Dashboard** — description: "Best if you have a browser on this machine. Open http://127.0.0.1:10254 and add the secret in the UI."
-2. **CLI** — description: "Best for remote/headless servers. Run: `onecli secrets create --name Anthropic --type anthropic --value YOUR_KEY --host-pattern api.anthropic.com`"
+# Set the credentials (use sed to update existing or append)
+grep -q 'ANTHROPIC_BASE_URL=' .env && sed -i 's|^ANTHROPIC_BASE_URL=.*|ANTHROPIC_BASE_URL=https://api.anthropic.com|' .env || echo 'ANTHROPIC_BASE_URL=https://api.anthropic.com' >> .env
+grep -q 'ANTHROPIC_API_KEY=' .env && sed -i "s|^ANTHROPIC_API_KEY=.*|ANTHROPIC_API_KEY=<key>|" .env || echo "ANTHROPIC_API_KEY=<key>" >> .env
+chmod 600 .env
+```
+
+### Third-party provider path
+
+Collect the base URL and API key. Common providers:
+- MiniMax: `ANTHROPIC_BASE_URL=https://api.minimax.io/anthropic`
+- Also collect `AGENT_MODEL` if the provider uses a different model name.
+
+Write all values to `.env` as above.
 
 ### After either path
 
-Ask them to let you know when done.
+Verify credentials work by running a quick container test:
+```bash
+echo '{"prompt":"Say hi","groupFolder":"test","chatJid":"test@test","isMain":false}' | docker run -i -e ANTHROPIC_BASE_URL=<url> -e ANTHROPIC_API_KEY=<key> nanoclaw-agent:latest
+```
 
-**If the user's response happens to contain a token or key** (starts with `sk-ant-`): handle it gracefully — run the `onecli secrets create` command with that value on their behalf.
+If the test returns a response, credentials are working. If it shows "Not logged in", the key or URL is wrong.
 
-**After user confirms:** verify with `onecli secrets list` that an Anthropic secret exists. If not, ask again.
+### Optional: git-crypt encryption
+
+AskUserQuestion: Do you want to encrypt `.env` in your git repo using git-crypt?
+
+If yes:
+```bash
+sudo apt-get install -y git-crypt   # or brew install git-crypt
+git-crypt init
+# .gitattributes already has .env filter rules
+git-crypt export-key .git-crypt-key
+git add .env && git commit -m "Add encrypted .env"
+```
+Tell user to back up `.git-crypt-key` securely — it's needed to unlock on other machines.
 
 ## 5. Set Up Channels
 
@@ -258,6 +251,152 @@ Replace `USERNAME` with the actual username (from `whoami`). Run the two `sudo` 
 - Linux: check `systemctl --user status nanoclaw`.
 - Re-run the service step after fixing.
 
+## 7a. Headless Server Hardening (Linux only)
+
+**Skip this step on macOS or if the user is running a desktop environment they want to keep.**
+
+Detect if this is a headless server (no monitor, Raspberry Pi, VPS):
+```bash
+# Check if running on Raspberry Pi
+IS_RPI=$(grep -q 'Raspberry Pi\|BCM2' /proc/cpuinfo 2>/dev/null && echo "true" || echo "false")
+# Check if any display server is running
+HAS_DISPLAY=$(pgrep -x "Xorg\|labwc\|sway\|gnome-shell" > /dev/null 2>&1 && echo "true" || echo "false")
+```
+
+AskUserQuestion: Is this a headless server (no monitor attached)?
+
+If yes, run the following optimizations:
+
+### Remove desktop/GUI packages
+```bash
+sudo apt-get purge -y \
+  chromium chromium-common chromium-l10n chromium-sandbox \
+  firefox \
+  vlc vlc-bin vlc-data vlc-l10n 'vlc-plugin-*' \
+  thonny \
+  libreoffice* \
+  lightdm lightdm-gtk-greeter \
+  rpd-wayland-core rpd-wayland-extras \
+  labwc wf-panel-pi \
+  xserver-xorg xserver-xorg-core 'xserver-xorg-*' xwayland \
+  cups cups-browsed cups-common \
+  modemmanager \
+  cloud-init \
+  nfs-common \
+  bluez \
+  pipewire pipewire-pulse \
+  2>/dev/null
+sudo apt-get autoremove -y
+sudo apt-get clean
+```
+
+### Disable unnecessary services
+```bash
+sudo systemctl disable --now \
+  lightdm cups cups-browsed bluetooth ModemManager \
+  nfs-blkmap rpcbind udisks2 \
+  cloud-init cloud-init-local cloud-config cloud-final cloud-init-network cloud-init-main \
+  wayvnc-control glamor-test rp1-test \
+  cups.socket rpcbind.socket cups.path cloud-init-hotplugd.socket \
+  serial-getty@ttyAMA10 getty@tty1 \
+  2>/dev/null
+```
+
+### Set boot target to multi-user (no GUI)
+```bash
+sudo systemctl set-default multi-user.target
+```
+
+### Reduce GPU memory (headless — no display)
+```bash
+grep -q 'gpu_mem=' /boot/firmware/config.txt || echo 'gpu_mem=16' | sudo tee -a /boot/firmware/config.txt
+```
+
+### Disable WiFi power management (prevents WiFi hangs)
+```bash
+sudo tee /etc/NetworkManager/conf.d/wifi-powersave-off.conf << 'EOF'
+[connection]
+wifi.powersave = 2
+EOF
+```
+
+### Configure hardware watchdog (auto-reboot on kernel hang)
+```bash
+sudo mkdir -p /etc/systemd/system.conf.d
+sudo tee /etc/systemd/system.conf.d/watchdog.conf << 'EOF'
+[Manager]
+RuntimeWatchdogSec=30
+RebootWatchdogSec=10min
+WatchdogDevice=/dev/watchdog0
+EOF
+```
+
+### Network watchdog (reboot on sustained network loss)
+```bash
+sudo tee /usr/local/bin/network-watchdog.sh << 'SCRIPT'
+#!/bin/bash
+COUNTER_FILE=/tmp/network-watchdog-failures
+GATEWAY=$(ip route | awk '/default/ {print $3}' | head -1)
+if ping -c 3 -W 5 "$GATEWAY" > /dev/null 2>&1; then
+    echo 0 > "$COUNTER_FILE"
+    exit 0
+fi
+FAILURES=$(cat "$COUNTER_FILE" 2>/dev/null || echo 0)
+FAILURES=$((FAILURES + 1))
+echo $FAILURES > "$COUNTER_FILE"
+logger -t network-watchdog "Network unreachable, failure count: $FAILURES"
+if [ "$FAILURES" -ge 5 ]; then
+    logger -t network-watchdog "5 consecutive failures, rebooting"
+    /sbin/reboot
+fi
+SCRIPT
+sudo chmod +x /usr/local/bin/network-watchdog.sh
+```
+
+### Limit journal size
+```bash
+sudo mkdir -p /etc/systemd/journald.conf.d
+sudo tee /etc/systemd/journald.conf.d/size.conf << 'EOF'
+[Journal]
+SystemMaxUse=100M
+MaxRetentionSec=7day
+EOF
+```
+
+### Set up maintenance cron jobs
+```bash
+# Network watchdog every minute, docker prune weekly, weekly reboot
+(crontab -l 2>/dev/null; echo '* * * * * /usr/local/bin/network-watchdog.sh') | sort -u | crontab -
+(crontab -l 2>/dev/null; echo '0 3 * * 0 docker system prune -f --filter "until=168h" >> /tmp/docker-prune.log 2>&1') | sort -u | crontab -
+(crontab -l 2>/dev/null; echo '30 3 * * 0 sudo /sbin/reboot') | sort -u | crontab -
+```
+
+### Raspberry Pi specific: EEPROM auto-power-on
+If `IS_RPI=true`, configure the Pi to automatically restart after power loss or `reboot` command (no button press needed):
+```bash
+sudo tee /tmp/eeprom-update.conf << 'EOF'
+[all]
+BOOT_UART=1
+BOOT_ORDER=0xf461
+POWER_OFF_ON_HALT=0
+WAKE_ON_GPIO=0
+EOF
+sudo rpi-eeprom-config --apply /tmp/eeprom-update.conf
+```
+
+### Install avahi for mDNS hostname resolution
+```bash
+sudo apt-get install -y avahi-daemon avahi-utils
+sudo systemctl enable --now avahi-daemon
+```
+
+### Enable user lingering (services start at boot without login)
+```bash
+sudo loginctl enable-linger $USER
+```
+
+After all hardening steps, tell the user a reboot is needed to apply GPU memory, EEPROM, and WiFi changes. **Ask user for confirmation before rebooting** — they may have other work in progress.
+
 ## 8. Verify
 
 Run `npx tsx setup/index.ts --step verify` and parse the status block.
@@ -265,7 +404,7 @@ Run `npx tsx setup/index.ts --step verify` and parse the status block.
 **If STATUS=failed, fix each:**
 - SERVICE=stopped → `npm run build`, then restart: `launchctl kickstart -k gui/$(id -u)/com.nanoclaw` (macOS) or `systemctl --user restart nanoclaw` (Linux) or `bash start-nanoclaw.sh` (WSL nohup)
 - SERVICE=not_found → re-run step 7
-- CREDENTIALS=missing → re-run step 4 (check `onecli secrets list` for Anthropic secret)
+- CREDENTIALS=missing → re-run step 4 (check `grep ANTHROPIC_API_KEY .env`)
 - CHANNEL_AUTH shows `not_found` for any channel → re-invoke that channel's skill (e.g. `/add-telegram`)
 - REGISTERED_GROUPS=0 → re-invoke the channel skills from step 5
 - MOUNT_ALLOWLIST=missing → `npx tsx setup/index.ts --step mounts -- --empty`
@@ -274,7 +413,7 @@ Tell user to test: send a message in their registered chat. Show: `tail -f logs/
 
 ## Troubleshooting
 
-**Service not starting:** Check `logs/nanoclaw.error.log`. Common: wrong Node path (re-run step 7), OneCLI not running (check `curl http://127.0.0.1:10254/api/health`), missing channel credentials (re-invoke channel skill).
+**Service not starting:** Check `logs/nanoclaw.error.log`. Common: wrong Node path (re-run step 7), missing API key in `.env` (re-run step 4), missing channel credentials (re-invoke channel skill).
 
 **Container agent fails ("Claude Code process exited with code 1"):** Ensure the container runtime is running — `open -a Docker` (macOS Docker), `container system start` (Apple Container), or `sudo systemctl start docker` (Linux). Check container logs in `groups/main/logs/container-*.log`.
 

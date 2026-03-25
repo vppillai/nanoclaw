@@ -749,9 +749,7 @@ export function getUsageSummary(sinceDays: number = 30): {
   return { byModel, totalCostUSD, periodDays: sinceDays };
 }
 
-export function getUsageByDay(
-  sinceDays: number = 7,
-): Array<{
+export function getUsageByDay(sinceDays: number = 7): Array<{
   date: string;
   costUSD: number;
   inputTokens: number;
