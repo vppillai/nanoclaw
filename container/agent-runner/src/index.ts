@@ -432,7 +432,6 @@ async function runQuery(
         'mcp__kasa__*',
         'mcp__mysa__*',
         'mcp__gcal__*',
-        'mcp__minimax__*',
       ],
       env: sdkEnv,
       permissionMode: 'bypassPermissions',
@@ -483,20 +482,6 @@ async function runQuery(
                   ...(process.env.GOOGLE_PERSONAL_CALENDAR_ID
                     ? { GOOGLE_PERSONAL_CALENDAR_ID: process.env.GOOGLE_PERSONAL_CALENDAR_ID }
                     : {}),
-                },
-              },
-            }
-          : {}),
-        ...(process.env.ANTHROPIC_API_KEY
-          ? {
-              minimax: {
-                command: 'npx',
-                args: ['-y', 'minimax-mcp-js'],
-                env: {
-                  MINIMAX_API_KEY: process.env.ANTHROPIC_API_KEY,
-                  MINIMAX_API_HOST: 'https://api.minimax.io',
-                  MINIMAX_API_RESOURCE_MODE: 'local',
-                  MINIMAX_MCP_BASE_PATH: '/workspace/group/attachments',
                 },
               },
             }

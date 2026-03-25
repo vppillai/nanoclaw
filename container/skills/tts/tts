@@ -1,0 +1,177 @@
+#!/bin/bash
+set -euo pipefail
+
+# tts — Text-to-speech using MiniMax speech HD API
+# Saves output to /workspace/group/attachments/ for sending via send_message
+
+VERSION="1.0.0"
+
+usage() {
+  cat <<'USAGE'
+tts — Convert text to speech with MiniMax
+
+Usage:
+  tts speak <text> [--voice <id>] [--output <path>]
+  tts voices
+  tts help
+
+Commands:
+  speak    Convert text to speech audio (MP3)
+  voices   List common English voice IDs
+  help     Show this help message
+
+Options:
+  --voice   Voice ID (default: English_Trustworth_Man)
+  --speed   Speed 0.5-2.0 (default: 1.0)
+  --output  Output file path (default: attachments/tts-<timestamp>.mp3)
+
+Environment:
+  ANTHROPIC_API_KEY   MiniMax API key (set automatically in container)
+USAGE
+}
+
+cmd_voices() {
+  cat <<'VOICES'
+English voices:
+  English_Trustworth_Man      — Calm, reliable male
+  English_Graceful_Lady       — Elegant female
+  English_Upbeat_Woman        — Energetic female
+  English_ManWithDeepVoice    — Deep male voice
+  English_CalmWoman           — Soothing female
+  English_FriendlyPerson      — Warm, approachable
+  English_PlayfulGirl         — Light, cheerful female
+  English_Debator             — Articulate, persuasive
+  English_Comedian            — Humorous delivery
+  English_ConfidentWoman      — Strong, assured female
+  English_PatientMan          — Steady, patient male
+  English_expressive_narrator — Expressive narration
+VOICES
+}
+
+cmd_speak() {
+  local text=""
+  local voice="English_Trustworth_Man"
+  local speed="1.0"
+  local output=""
+
+  while [[ $# -gt 0 ]]; do
+    case "$1" in
+      --voice)
+        voice="${2:-English_Trustworth_Man}"
+        shift 2
+        ;;
+      --speed)
+        speed="${2:-1.0}"
+        shift 2
+        ;;
+      --output)
+        output="${2:-}"
+        shift 2
+        ;;
+      -*)
+        echo "Error: Unknown option: $1" >&2
+        exit 1
+        ;;
+      *)
+        if [[ -z "$text" ]]; then
+          text="$1"
+        else
+          text="$text $1"
+        fi
+        shift
+        ;;
+    esac
+  done
+
+  if [[ -z "$text" ]]; then
+    echo "Error: No text specified" >&2
+    echo "Usage: tts speak <text> [--voice <id>]" >&2
+    exit 1
+  fi
+
+  local api_key="${ANTHROPIC_API_KEY:-}"
+  if [[ -z "$api_key" ]]; then
+    echo "Error: ANTHROPIC_API_KEY not set" >&2
+    exit 1
+  fi
+
+  if [[ -z "$output" ]]; then
+    mkdir -p attachments
+    output="attachments/tts-$(date +%s)-$(head -c 4 /dev/urandom | xxd -p).mp3"
+  fi
+
+  echo "Generating speech..." >&2
+  echo "Voice: $voice" >&2
+  echo "Text: ${text:0:100}..." >&2
+
+  local response
+  response=$(curl -s --max-time 120 \
+    -X POST "https://api.minimax.io/v1/t2a_v2" \
+    -H "Authorization: Bearer $api_key" \
+    -H "Content-Type: application/json" \
+    -d "$(jq -n \
+      --arg text "$text" \
+      --arg voice "$voice" \
+      --argjson speed "$speed" \
+      '{
+        model: "speech-2.8-hd",
+        text: $text,
+        stream: false,
+        voice_setting: {
+          voice_id: $voice,
+          speed: $speed,
+          vol: 1.0,
+          pitch: 0
+        },
+        audio_setting: {
+          sample_rate: 32000,
+          bitrate: 128000,
+          format: "mp3",
+          channel: 1
+        }
+      }')")
+
+  # Check for errors
+  local status_code
+  status_code=$(echo "$response" | jq -r '.base_resp.status_code // empty')
+  if [[ "$status_code" != "0" && -n "$status_code" ]]; then
+    local status_msg
+    status_msg=$(echo "$response" | jq -r '.base_resp.status_msg // "unknown error"')
+    echo "Error: MiniMax API error ($status_code): $status_msg" >&2
+    exit 1
+  fi
+
+  # Extract hex-encoded audio and decode to binary
+  local audio_hex
+  audio_hex=$(echo "$response" | jq -r '.data.audio // empty')
+  if [[ -z "$audio_hex" ]]; then
+    echo "Error: No audio data in response" >&2
+    echo "$response" | jq . >&2
+    exit 1
+  fi
+
+  echo "$audio_hex" | xxd -r -p > "$output"
+
+  local size
+  size=$(du -h "$output" | cut -f1)
+  local duration
+  duration=$(echo "$response" | jq -r '.extra_info.audio_length // "?"')
+  echo "Saved: $output ($size, ${duration}ms)" >&2
+  echo "$output"
+}
+
+# Main dispatch
+command="${1:-help}"
+shift || true
+
+case "$command" in
+  speak) cmd_speak "$@" ;;
+  voices) cmd_voices ;;
+  help|--help|-h) usage ;;
+  version|--version|-v) echo "tts $VERSION" ;;
+  *)
+    echo "Error: Unknown command: $command" >&2
+    echo "Run 'tts help' for usage." >&2
+    exit 1
+    ;;
+esac

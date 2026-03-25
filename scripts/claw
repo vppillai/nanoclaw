@@ -140,9 +140,61 @@ def apply_integration_env(cmd: list, env_file: Path) -> None:
             cmd.extend(["-e", f"{key}={value}"])
 
 
+def apply_volume_mounts(cmd: list, payload: dict) -> None:
+    """Mount group workspace, .claude skills, and IPC directories into the container."""
+    group_folder = payload.get("groupFolder", "")
+    is_main = payload.get("isMain", False)
+
+    if not group_folder:
+        return
+
+    groups_dir = NANOCLAW_DIR / "groups"
+    data_dir = NANOCLAW_DIR / "data"
+    group_dir = groups_dir / group_folder
+    session_dir = data_dir / "sessions" / group_folder
+    claude_dir = session_dir / ".claude"
+    ipc_dir = data_dir / "ipc" / group_folder
+
+    # Ensure directories exist
+    group_dir.mkdir(parents=True, exist_ok=True)
+    claude_dir.mkdir(parents=True, exist_ok=True)
+    for sub in ("messages", "tasks", "input"):
+        (ipc_dir / sub).mkdir(parents=True, exist_ok=True)
+
+    # Sync skills from container/skills/ into session .claude/skills/
+    skills_src = NANOCLAW_DIR / "container" / "skills"
+    skills_dst = claude_dir / "skills"
+    if skills_src.exists():
+        import shutil
+        for skill_dir in skills_src.iterdir():
+            if skill_dir.is_dir():
+                dst = skills_dst / skill_dir.name
+                shutil.copytree(skill_dir, dst, dirs_exist_ok=True)
+
+    # Main group gets project root read-only
+    if is_main:
+        cmd.extend(["-v", f"{NANOCLAW_DIR}:/workspace/project:ro"])
+        # Shadow .env
+        env_file = NANOCLAW_DIR / ".env"
+        if env_file.exists():
+            cmd.extend(["-v", "/dev/null:/workspace/project/.env:ro"])
+
+    # Group workspace (writable)
+    cmd.extend(["-v", f"{group_dir}:/workspace/group"])
+    # .claude with skills (writable)
+    cmd.extend(["-v", f"{claude_dir}:/home/node/.claude"])
+    # IPC directory
+    cmd.extend(["-v", f"{ipc_dir}:/workspace/ipc"])
+    # Agent-runner source (if cached)
+    agent_runner_dir = session_dir / "agent-runner-src"
+    if agent_runner_dir.exists():
+        cmd.extend(["-v", f"{agent_runner_dir}:/app/src"])
+
+
 def run_container(runtime: str, image: str, payload: dict, timeout: int = 300) -> None:
     cmd = [runtime, "run", "-i", "--rm"]
     apply_integration_env(cmd, ENV_FILE)
+    apply_volume_mounts(cmd, payload)
     if sys.platform.startswith("linux"):
         cmd.extend(["--add-host", "host.docker.internal:host-gateway"])
     cmd.append(image)
@@ -298,6 +350,7 @@ def main():
     # Resolve group → jid
     jid = args.jid
     group_name = None
+    group_folder = None
     is_main = False
 
     if args.group:
@@ -306,6 +359,7 @@ def main():
             sys.exit(f"error: group '{args.group}' not found. Run --list-groups to see options.")
         jid = g["jid"]
         group_name = g["name"]
+        group_folder = g["folder"]
         is_main = g["is_main"]
     elif not jid:
         # Default: main group
@@ -313,6 +367,7 @@ def main():
         if mains:
             jid = mains[0]["jid"]
             group_name = mains[0]["name"]
+            group_folder = mains[0]["folder"]
             is_main = True
         else:
             sys.exit("error: no group specified and no main group found. Use -g or -j.")
@@ -329,8 +384,8 @@ def main():
         "isMain": is_main,
         "secrets": secrets,
     }
-    if group_name:
-        payload["groupFolder"] = group_name
+    if group_folder:
+        payload["groupFolder"] = group_folder
     if args.session:
         payload["sessionId"] = args.session
         payload["resumeAt"] = "latest"
