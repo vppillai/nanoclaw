@@ -397,6 +397,85 @@ sudo loginctl enable-linger $USER
 
 After all hardening steps, tell the user a reboot is needed to apply GPU memory, EEPROM, and WiFi changes. **Ask user for confirmation before rebooting** — they may have other work in progress.
 
+## 7b. Whisper.cpp Voice Transcription (Linux)
+
+Set up local speech-to-text so voice messages are transcribed automatically. Runs as a systemd service — model loads once and stays in RAM.
+
+### Check if already installed
+
+```bash
+which whisper-server 2>/dev/null && echo "INSTALLED" || echo "MISSING"
+systemctl --user is-active whisper 2>/dev/null || echo "NOT_RUNNING"
+```
+
+If both are OK, skip to step 8.
+
+### Build whisper.cpp from source
+
+```bash
+sudo apt-get install -y cmake build-essential
+cd /opt/nanoclaw
+git clone https://github.com/ggerganov/whisper.cpp.git
+cd whisper.cpp
+cmake -B build -DCMAKE_BUILD_TYPE=Release -DWHISPER_BUILD_SERVER=ON
+cmake --build build -j$(nproc) --target whisper-server
+sudo cp build/bin/whisper-server /usr/local/bin/
+cd /opt/nanoclaw/nanoclaw
+```
+
+### Download model
+
+```bash
+mkdir -p data/models
+curl -L -o data/models/ggml-base.bin \
+  "https://huggingface.co/ggerganov/whisper.cpp/resolve/main/ggml-base.bin"
+```
+
+The `base` model (148MB) is a good balance of speed and accuracy on Pi 5. For faster but less accurate: `ggml-tiny.bin` (77MB). For better accuracy: `ggml-small.bin` (466MB).
+
+### Create systemd service
+
+```bash
+cat << 'EOF' > ~/.config/systemd/user/whisper.service
+[Unit]
+Description=Whisper.cpp Speech-to-Text Server
+Before=nanoclaw.service
+
+[Service]
+Type=simple
+ExecStart=/usr/local/bin/whisper-server -m /opt/nanoclaw/nanoclaw/data/models/ggml-base.bin --host 127.0.0.1 --port 8178 --convert
+Restart=always
+RestartSec=5
+
+[Install]
+WantedBy=default.target
+EOF
+systemctl --user daemon-reload
+systemctl --user enable --now whisper
+```
+
+### Update NanoClaw service to depend on whisper
+
+Ensure the nanoclaw service starts after whisper:
+
+```bash
+sed -i 's/After=network-online.target docker.service/After=network-online.target docker.service whisper.service/' \
+  ~/.config/systemd/user/nanoclaw.service
+sed -i 's/Wants=network-online.target/Wants=network-online.target whisper.service/' \
+  ~/.config/systemd/user/nanoclaw.service
+systemctl --user daemon-reload
+```
+
+### Verify
+
+```bash
+# Test the server responds
+curl -s -X POST http://127.0.0.1:8178/inference \
+  -F "file=@<any-audio-file>" -F "response_format=json"
+```
+
+Boot order is now: `docker` → `whisper` → `nanoclaw`.
+
 ## 8. Verify
 
 Run `npx tsx setup/index.ts --step verify` and parse the status block.
