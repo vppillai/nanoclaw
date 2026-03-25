@@ -73,7 +73,7 @@ server.tool(
 
       const lines = Object.entries(devicesObj).map(([id, dev]) => {
         const state = statesObj[id];
-        const temp = formatTemp(state?.SensorTemp ?? state?.CorrectedTemp);
+        const temp = formatTemp(state?.CorrectedTemp ?? state?.SensorTemp);
         const setpoint = formatTemp(state?.SetPoint);
         const humidity = state?.Humidity?.v;
         const humStr = humidity != null ? `, ${Math.round(humidity)}% humidity` : '';

@@ -6,9 +6,7 @@ const WHISPER_URL = 'http://127.0.0.1:8178/inference';
  * Transcribe audio buffer via local whisper.cpp server.
  * Returns trimmed transcript text, or null on failure.
  */
-export async function transcribeAudio(
-  buffer: Buffer,
-): Promise<string | null> {
+export async function transcribeAudio(buffer: Buffer): Promise<string | null> {
   try {
     const formData = new FormData();
     formData.append(
