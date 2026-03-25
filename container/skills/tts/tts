@@ -50,7 +50,7 @@ VOICES
 
 cmd_speak() {
   local text=""
-  local voice="English_Trustworth_Man"
+  local voice="${TTS_DEFAULT_VOICE:-English_ManWithDeepVoice}"
   local speed="1.0"
   local output=""
 

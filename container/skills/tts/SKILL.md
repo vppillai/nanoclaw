@@ -40,16 +40,24 @@ Use the MCP tool `send_message` with:
 
 Audio files are sent as WhatsApp voice notes automatically.
 
-## Voice selection guide
+## Voice selection
 
-| Voice | Best for |
-|-------|----------|
-| `English_Trustworth_Man` | Default — professional, calm |
+If the user asks for a specific voice style (e.g. "use a female voice", "deep voice", "cheerful"), pick the best match from the list below. If no preference is given, the default voice is used (configurable via `TTS_DEFAULT_VOICE` env var, defaults to `English_Trustworth_Man`).
+
+| Voice ID | Style |
+|----------|-------|
+| `English_Trustworth_Man` | Calm, reliable male |
 | `English_Graceful_Lady` | Elegant, professional female |
 | `English_FriendlyPerson` | Warm, conversational |
-| `English_expressive_narrator` | Storytelling, long content |
-| `English_Upbeat_Woman` | Energetic updates |
-| `English_CalmWoman` | Relaxing, soothing content |
-| `English_ManWithDeepVoice` | Authoritative, impactful |
+| `English_expressive_narrator` | Storytelling, narration |
+| `English_Upbeat_Woman` | Energetic, cheerful female |
+| `English_CalmWoman` | Relaxing, soothing female |
+| `English_ManWithDeepVoice` | Deep, authoritative male (default) |
+| `English_PlayfulGirl` | Light, cheerful female |
+| `English_Comedian` | Humorous delivery |
+| `English_ConfidentWoman` | Strong, assured female |
+| `English_PatientMan` | Steady, patient male |
+| `English_magnetic_voiced_man` | Rich, attractive male |
+| `English_radiant_girl` | Bright, youthful female |
 
-Run `tts voices` for the full list.
+Run `tts voices` for the full list. Any voice ID from `tts voices` can be passed via `--voice`.
