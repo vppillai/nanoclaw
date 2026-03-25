@@ -538,7 +538,7 @@ describe('WhatsAppChannel', () => {
       );
     });
 
-    it('handles message with no extractable text (e.g. voice note without caption)', async () => {
+    it('delivers voice messages with placeholder text', async () => {
       const opts = createTestOpts();
       const channel = new WhatsAppChannel(opts);
 
@@ -560,8 +560,15 @@ describe('WhatsAppChannel', () => {
         },
       ]);
 
-      // Skipped — no text content to process
-      expect(opts.onMessage).not.toHaveBeenCalled();
+      // Voice messages are delivered with a placeholder since no STT is available
+      expect(opts.onMessage).toHaveBeenCalledWith(
+        'registered@g.us',
+        expect.objectContaining({
+          content:
+            '[Voice message received - audio transcription not available]',
+          sender_name: 'Frank',
+        }),
+      );
     });
 
     it('uses sender JID when pushName is absent', async () => {

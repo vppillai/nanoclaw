@@ -1,0 +1,144 @@
+#!/bin/bash
+set -euo pipefail
+
+# image-gen — Generate images using MiniMax image-01 API
+# Saves output to /workspace/group/attachments/ for sending via send_message
+
+VERSION="1.0.0"
+
+usage() {
+  cat <<'USAGE'
+image-gen — Generate images with MiniMax image-01
+
+Usage:
+  image-gen generate <prompt> [--aspect <ratio>] [--output <path>]
+  image-gen help
+
+Commands:
+  generate   Generate an image from a text prompt
+  help       Show this help message
+
+Options:
+  --aspect   Aspect ratio: 1:1, 16:9, 4:3, 3:2, 2:3, 3:4, 9:16 (default: 1:1)
+  --output   Output file path (default: attachments/img-<timestamp>.jpg)
+
+Environment:
+  ANTHROPIC_API_KEY   MiniMax API key (set automatically in container)
+USAGE
+}
+
+cmd_generate() {
+  local prompt=""
+  local aspect="1:1"
+  local output=""
+
+  while [[ $# -gt 0 ]]; do
+    case "$1" in
+      --aspect)
+        aspect="${2:-1:1}"
+        shift 2
+        ;;
+      --output)
+        output="${2:-}"
+        shift 2
+        ;;
+      -*)
+        echo "Error: Unknown option: $1" >&2
+        exit 1
+        ;;
+      *)
+        if [[ -z "$prompt" ]]; then
+          prompt="$1"
+        else
+          prompt="$prompt $1"
+        fi
+        shift
+        ;;
+    esac
+  done
+
+  if [[ -z "$prompt" ]]; then
+    echo "Error: No prompt specified" >&2
+    echo "Usage: image-gen generate <prompt> [--aspect <ratio>]" >&2
+    exit 1
+  fi
+
+  local api_key="${ANTHROPIC_API_KEY:-}"
+  if [[ -z "$api_key" ]]; then
+    echo "Error: ANTHROPIC_API_KEY not set" >&2
+    exit 1
+  fi
+
+  # Default output path
+  if [[ -z "$output" ]]; then
+    mkdir -p attachments
+    output="attachments/img-$(date +%s)-$(head -c 4 /dev/urandom | xxd -p).jpg"
+  fi
+
+  echo "Generating image..." >&2
+  echo "Prompt: ${prompt:0:100}..." >&2
+  echo "Aspect: $aspect" >&2
+
+  local response
+  response=$(curl -s --max-time 120 \
+    -X POST "https://api.minimax.io/v1/image_generation" \
+    -H "Authorization: Bearer $api_key" \
+    -H "Content-Type: application/json" \
+    -d "$(jq -n \
+      --arg prompt "$prompt" \
+      --arg aspect "$aspect" \
+      '{
+        model: "image-01",
+        prompt: $prompt,
+        aspect_ratio: $aspect,
+        response_format: "url",
+        n: 1
+      }')")
+
+  # Check for errors
+  local status_code
+  status_code=$(echo "$response" | jq -r '.base_resp.status_code // empty')
+  if [[ "$status_code" != "0" && -n "$status_code" ]]; then
+    local status_msg
+    status_msg=$(echo "$response" | jq -r '.base_resp.status_msg // "unknown error"')
+    echo "Error: MiniMax API error ($status_code): $status_msg" >&2
+    exit 1
+  fi
+
+  # Extract image URL
+  local image_url
+  image_url=$(echo "$response" | jq -r '.data.image_urls[0] // empty')
+  if [[ -z "$image_url" ]]; then
+    echo "Error: No image URL in response" >&2
+    echo "$response" | jq . >&2
+    exit 1
+  fi
+
+  # Download the image
+  local http_code
+  http_code=$(curl -s -o "$output" -w "%{http_code}" --max-time 60 "$image_url")
+  if [[ "$http_code" != "200" ]]; then
+    echo "Error: Failed to download image (HTTP $http_code)" >&2
+    exit 1
+  fi
+
+  local size
+  size=$(du -h "$output" | cut -f1)
+  echo "Saved: $output ($size)" >&2
+  echo "$output"
+}
+
+# Main dispatch
+command="${1:-help}"
+shift || true
+
+case "$command" in
+  generate) cmd_generate "$@" ;;
+  help|--help|-h) usage ;;
+  version|--version|-v) echo "image-gen $VERSION" ;;
+  *)
+    echo "Error: Unknown command: $command" >&2
+    echo "Run 'image-gen help' for usage." >&2
+    exit 1
+    ;;
+esac

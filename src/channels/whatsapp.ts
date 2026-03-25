@@ -1,4 +1,4 @@
-import { exec } from 'child_process';
+import { exec, execFileSync } from 'child_process';
 import fs from 'fs';
 import path from 'path';
 
@@ -241,6 +241,12 @@ export class WhatsAppChannel implements Channel {
               }
             }
 
+            // Voice message handling — deliver as placeholder since no STT is available
+            if (!content && normalized?.audioMessage?.ptt) {
+              content =
+                '[Voice message received - audio transcription not available]';
+            }
+
             // Skip protocol messages with no text content (encryption keys, read receipts, etc.)
             if (!content) continue;
 
@@ -277,7 +283,11 @@ export class WhatsAppChannel implements Channel {
     });
   }
 
-  async sendMessage(jid: string, text: string): Promise<void> {
+  async sendMessage(
+    jid: string,
+    text: string,
+    mediaPath?: string,
+  ): Promise<void> {
     // Prefix bot messages with assistant name so users know who's speaking.
     // On a shared number, prefix is also needed in DMs (including self-chat)
     // to distinguish bot output from user messages.
@@ -295,8 +305,91 @@ export class WhatsAppChannel implements Channel {
       return;
     }
     try {
-      await this.sock.sendMessage(jid, { text: prefixed });
-      logger.info({ jid, length: prefixed.length }, 'Message sent');
+      if (mediaPath && fs.existsSync(mediaPath)) {
+        const buffer = fs.readFileSync(mediaPath);
+        const ext = mediaPath.split('.').pop()?.toLowerCase();
+        if (
+          ext === 'jpg' ||
+          ext === 'jpeg' ||
+          ext === 'png' ||
+          ext === 'webp'
+        ) {
+          await this.sock.sendMessage(jid, {
+            image: buffer,
+            caption: prefixed || undefined,
+          });
+          logger.info({ jid, mediaPath, type: 'image' }, 'Image message sent');
+        } else if (
+          ext === 'mp3' ||
+          ext === 'ogg' ||
+          ext === 'wav' ||
+          ext === 'opus'
+        ) {
+          // WhatsApp voice notes require OGG/Opus. Convert if needed.
+          let audioBuffer = buffer;
+          if (ext !== 'ogg' && ext !== 'opus') {
+            try {
+              const oggPath = mediaPath.replace(/\.[^.]+$/, '.ogg');
+              execFileSync(
+                'ffmpeg',
+                [
+                  '-y',
+                  '-i',
+                  mediaPath,
+                  '-c:a',
+                  'libopus',
+                  '-b:a',
+                  '64k',
+                  '-vbr',
+                  'on',
+                  '-application',
+                  'voip',
+                  '-f',
+                  'ogg',
+                  oggPath,
+                ],
+                { timeout: 30000, stdio: 'pipe' },
+              );
+              audioBuffer = fs.readFileSync(oggPath);
+              fs.unlinkSync(oggPath); // clean up temp file
+              logger.debug(
+                { mediaPath, oggPath },
+                'Converted audio to OGG/Opus',
+              );
+            } catch (err) {
+              logger.warn(
+                { err, mediaPath },
+                'ffmpeg conversion failed, sending as-is',
+              );
+            }
+          }
+          await this.sock.sendMessage(jid, {
+            audio: audioBuffer,
+            mimetype: 'audio/ogg; codecs=opus',
+            ptt: true,
+          });
+          logger.info({ jid, mediaPath, type: 'audio' }, 'Audio message sent');
+          // Send caption as separate text if present
+          if (prefixed) {
+            await this.sock.sendMessage(jid, { text: prefixed });
+          }
+        } else {
+          // Unknown media type — send as document
+          await this.sock.sendMessage(jid, {
+            document: buffer,
+            mimetype: 'application/octet-stream',
+            fileName: mediaPath.split('/').pop() || 'file',
+            caption: prefixed || undefined,
+          });
+          logger.info(
+            { jid, mediaPath, type: 'document' },
+            'Document message sent',
+          );
+        }
+      } else {
+        await this.sock.sendMessage(jid, { text: prefixed });
+        logger.info({ jid, length: prefixed.length }, 'Message sent');
+      }
     } catch (err) {
       // If send fails, queue it for retry on reconnect
       this.outgoingQueue.push({ jid, text: prefixed });
