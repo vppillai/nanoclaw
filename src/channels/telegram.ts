@@ -261,12 +261,22 @@ export class TelegramChannel implements Channel {
       if (mediaPath && fs.existsSync(mediaPath)) {
         const ext = mediaPath.split('.').pop()?.toLowerCase();
         const file = new InputFile(mediaPath);
-        if (ext === 'jpg' || ext === 'jpeg' || ext === 'png' || ext === 'webp') {
+        if (
+          ext === 'jpg' ||
+          ext === 'jpeg' ||
+          ext === 'png' ||
+          ext === 'webp'
+        ) {
           await this.bot.api.sendPhoto(numericId, file, {
             caption: text || undefined,
           });
           logger.info({ jid, mediaPath, type: 'photo' }, 'Telegram photo sent');
-        } else if (ext === 'mp3' || ext === 'ogg' || ext === 'wav' || ext === 'opus') {
+        } else if (
+          ext === 'mp3' ||
+          ext === 'ogg' ||
+          ext === 'wav' ||
+          ext === 'opus'
+        ) {
           await this.bot.api.sendVoice(numericId, file, {
             caption: text || undefined,
           });
@@ -275,7 +285,10 @@ export class TelegramChannel implements Channel {
           await this.bot.api.sendDocument(numericId, file, {
             caption: text || undefined,
           });
-          logger.info({ jid, mediaPath, type: 'document' }, 'Telegram document sent');
+          logger.info(
+            { jid, mediaPath, type: 'document' },
+            'Telegram document sent',
+          );
         }
         return;
       }
@@ -294,10 +307,7 @@ export class TelegramChannel implements Channel {
           );
         }
       }
-      logger.info(
-        { jid, length: text.length },
-        'Telegram message sent',
-      );
+      logger.info({ jid, length: text.length }, 'Telegram message sent');
     } catch (err) {
       logger.error({ jid, err }, 'Failed to send Telegram message');
     }
