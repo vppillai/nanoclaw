@@ -48,7 +48,8 @@ server.tool(
         return `${i + 1}. ${instruction} (${s.distance.text}, ${s.duration.text})`;
       }).join('\n');
 
-      return { content: [{ type: 'text' as const, text: `${args.origin} → ${args.destination}\nDistance: ${leg.distance.text} | Duration: ${leg.duration.text} | Mode: ${args.mode}\n\n${steps}` }] };
+      const mapsUrl = `https://www.google.com/maps/dir/?api=1&origin=${encodeURIComponent(args.origin)}&destination=${encodeURIComponent(args.destination)}&travelmode=${args.mode}`;
+      return { content: [{ type: 'text' as const, text: `${args.origin} → ${args.destination}\nDistance: ${leg.distance.text} | Duration: ${leg.duration.text} | Mode: ${args.mode}\n\n${steps}\n\nNavigate: ${mapsUrl}` }] };
     } catch (err) {
       return { content: [{ type: 'text' as const, text: `Error: ${err instanceof Error ? err.message : String(err)}` }], isError: true };
     }
