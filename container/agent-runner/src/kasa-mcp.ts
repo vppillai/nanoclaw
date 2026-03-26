@@ -3,18 +3,17 @@
  *
  * IOT.SMARTPLUGSWITCH devices: cloud API passthrough for status and control.
  * SMART.KASASWITCH devices: cloud API for listing (with base64 alias decode),
- * UDP discovery for real online status. Local KLAP control is not yet
- * implemented (requires TCP access to devices on port 80).
+ * host-side UDP discovery for real online status (read from IPC snapshot).
+ * Local KLAP control is not yet implemented (requires TCP access on port 80).
  */
 
-import dgram from 'dgram';
+import fs from 'fs';
 import { McpServer } from '@modelcontextprotocol/sdk/server/mcp.js';
 import { StdioServerTransport } from '@modelcontextprotocol/sdk/server/stdio.js';
 import { z } from 'zod';
 
 const APP_TYPE = 'Kasa_Android';
 const TERMINAL_UUID = 'nanoclaw-kasa-mcp';
-const DISCOVERY_TIMEOUT_MS = 3000;
 
 const username = process.env.KASA_USERNAME!;
 const password = process.env.KASA_PASSWORD!;
@@ -111,7 +110,7 @@ async function passthrough(device: MergedDevice, command: object): Promise<unkno
 }
 
 // ---------------------------------------------------------------------------
-// UDP Discovery (works even when TCP is blocked)
+// Local Discovery (read from host-side IPC snapshot)
 // ---------------------------------------------------------------------------
 
 interface DiscoveredDevice {
@@ -123,112 +122,21 @@ interface DiscoveredDevice {
   relayState?: number;
 }
 
-/** XOR-encrypt/decrypt for IOT protocol (port 9999). */
-function xorEncrypt(input: string): Buffer {
-  const buf = Buffer.alloc(input.length);
-  let key = 171;
-  for (let i = 0; i < input.length; i++) {
-    const b = key ^ input.charCodeAt(i);
-    key = b;
-    buf[i] = b;
-  }
-  return buf;
-}
-
-function xorDecrypt(buf: Buffer): string {
-  let result = '';
-  let key = 171;
-  for (let i = 0; i < buf.length; i++) {
-    result += String.fromCharCode(key ^ buf[i]);
-    key = buf[i];
-  }
-  return result;
-}
-
 function normalizeMac(mac: string): string {
   return mac.replace(/[-:]/g, '').toUpperCase();
 }
 
+const DISCOVERY_FILE = '/workspace/ipc/kasa_discovery.json';
+
+/** Read host-side UDP discovery results from the IPC snapshot file. */
 async function discoverDevices(): Promise<DiscoveredDevice[]> {
-  const devices: DiscoveredDevice[] = [];
-
-  await Promise.all([discoverIOT(devices), discoverSMART(devices)]);
-
-  return devices;
-}
-
-/** Discover IOT devices via encrypted UDP broadcast on port 9999. */
-function discoverIOT(devices: DiscoveredDevice[]): Promise<void> {
-  return new Promise((resolve) => {
-    const sock = dgram.createSocket({ type: 'udp4', reuseAddr: true });
-    const cmd = JSON.stringify({ system: { get_sysinfo: {} } });
-    const payload = xorEncrypt(cmd);
-
-    sock.on('message', (msg, rinfo) => {
-      try {
-        const json = JSON.parse(xorDecrypt(msg));
-        const sys = json.system?.get_sysinfo;
-        if (sys) {
-          devices.push({
-            ip: rinfo.address,
-            mac: normalizeMac(sys.mac || ''),
-            model: sys.model || '',
-            deviceType: sys.type || sys.mic_type || 'IOT.SMARTPLUGSWITCH',
-            alias: sys.alias,
-            relayState: sys.relay_state,
-          });
-        }
-      } catch { /* ignore malformed */ }
-    });
-
-    sock.bind(() => {
-      sock.setBroadcast(true);
-      sock.send(payload, 0, payload.length, 9999, '255.255.255.255');
-      setTimeout(() => { sock.close(); resolve(); }, DISCOVERY_TIMEOUT_MS);
-    });
-  });
-}
-
-/** Discover SMART devices via JSON UDP broadcast on port 20002. */
-function discoverSMART(devices: DiscoveredDevice[]): Promise<void> {
-  return new Promise((resolve) => {
-    const sock = dgram.createSocket({ type: 'udp4', reuseAddr: true });
-    const payload = Buffer.from('\x02');
-
-    sock.on('message', (msg, rinfo) => {
-      try {
-        // Skip the first 16 bytes (header) then parse JSON
-        // SMART discovery responses have a 16-byte header before JSON
-        let json: any;
-        try {
-          json = JSON.parse(msg.toString());
-        } catch {
-          // Try skipping header bytes
-          for (let offset = 1; offset < Math.min(32, msg.length); offset++) {
-            try {
-              json = JSON.parse(msg.subarray(offset).toString());
-              break;
-            } catch { /* try next offset */ }
-          }
-        }
-        const result = json?.result;
-        if (result?.device_type?.startsWith('SMART.')) {
-          devices.push({
-            ip: rinfo.address,
-            mac: normalizeMac(result.mac || ''),
-            model: result.device_model || '',
-            deviceType: result.device_type,
-          });
-        }
-      } catch { /* ignore malformed */ }
-    });
-
-    sock.bind(() => {
-      sock.setBroadcast(true);
-      sock.send(payload, 0, payload.length, 20002, '255.255.255.255');
-      setTimeout(() => { sock.close(); resolve(); }, DISCOVERY_TIMEOUT_MS);
-    });
-  });
+  try {
+    const data = fs.readFileSync(DISCOVERY_FILE, 'utf-8');
+    const parsed = JSON.parse(data) as { devices?: DiscoveredDevice[] };
+    return parsed.devices || [];
+  } catch {
+    return [];
+  }
 }
 
 // ---------------------------------------------------------------------------

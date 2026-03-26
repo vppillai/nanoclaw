@@ -24,6 +24,7 @@ import {
   writeTasksSnapshot,
   writeUsageSnapshot,
 } from './container-runner.js';
+import { writeKasaDiscoverySnapshot } from './kasa-discovery.js';
 import {
   cleanupOrphans,
   ensureContainerRuntimeRunning,
@@ -428,6 +429,9 @@ async function runAgent(
     availableGroups,
     new Set(Object.keys(registeredGroups)),
   );
+
+  // Write Kasa device discovery snapshot (host-side UDP, cached)
+  await writeKasaDiscoverySnapshot(group.folder).catch(() => {});
 
   // Wrap onOutput to track session ID from streamed results
   const wrappedOnOutput = onOutput
