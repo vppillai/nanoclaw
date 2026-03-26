@@ -403,31 +403,29 @@ describe('IPC message authorization', () => {
   });
 
   it('non-main group can send to its own chat', () => {
-    expect(
-      isMessageAuthorized('other-group', false, 'tg:200', groups),
-    ).toBe(true);
+    expect(isMessageAuthorized('other-group', false, 'tg:200', groups)).toBe(
+      true,
+    );
   });
 
   it('non-main group cannot send to another groups chat', () => {
     expect(isMessageAuthorized('other-group', false, 'tg:100', groups)).toBe(
       false,
     );
-    expect(
-      isMessageAuthorized('other-group', false, 'tg:300', groups),
-    ).toBe(false);
+    expect(isMessageAuthorized('other-group', false, 'tg:300', groups)).toBe(
+      false,
+    );
   });
 
   it('non-main group cannot send to unregistered JID', () => {
-    expect(
-      isMessageAuthorized('other-group', false, 'tg:999', groups),
-    ).toBe(false);
+    expect(isMessageAuthorized('other-group', false, 'tg:999', groups)).toBe(
+      false,
+    );
   });
 
   it('main group can send to unregistered JID', () => {
     // Main is always authorized regardless of target
-    expect(isMessageAuthorized('main', true, 'tg:999', groups)).toBe(
-      true,
-    );
+    expect(isMessageAuthorized('main', true, 'tg:999', groups)).toBe(true);
   });
 });
 
@@ -452,24 +450,24 @@ describe('IPC reaction authorization', () => {
   });
 
   it('non-main group can react in its own chat', () => {
-    expect(
-      isReactionAuthorized('other-group', false, 'tg:200', groups),
-    ).toBe(true);
+    expect(isReactionAuthorized('other-group', false, 'tg:200', groups)).toBe(
+      true,
+    );
   });
 
   it('non-main group cannot react in another groups chat', () => {
-    expect(
-      isReactionAuthorized('other-group', false, 'tg:100', groups),
-    ).toBe(false);
-    expect(
-      isReactionAuthorized('other-group', false, 'tg:300', groups),
-    ).toBe(false);
+    expect(isReactionAuthorized('other-group', false, 'tg:100', groups)).toBe(
+      false,
+    );
+    expect(isReactionAuthorized('other-group', false, 'tg:300', groups)).toBe(
+      false,
+    );
   });
 
   it('non-main group cannot react in unregistered JID', () => {
-    expect(
-      isReactionAuthorized('other-group', false, 'tg:999', groups),
-    ).toBe(false);
+    expect(isReactionAuthorized('other-group', false, 'tg:999', groups)).toBe(
+      false,
+    );
   });
 });
 

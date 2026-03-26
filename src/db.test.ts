@@ -187,22 +187,14 @@ describe('getMessagesSince', () => {
   });
 
   it('returns messages after the given timestamp', () => {
-    const msgs = getMessagesSince(
-      'tg:100',
-      '2024-01-01T00:00:02.000Z',
-      'Andy',
-    );
+    const msgs = getMessagesSince('tg:100', '2024-01-01T00:00:02.000Z', 'Andy');
     // Should exclude m1, m2 (before/at timestamp), m3 (bot message)
     expect(msgs).toHaveLength(1);
     expect(msgs[0].content).toBe('third');
   });
 
   it('excludes bot messages via is_bot_message flag', () => {
-    const msgs = getMessagesSince(
-      'tg:100',
-      '2024-01-01T00:00:00.000Z',
-      'Andy',
-    );
+    const msgs = getMessagesSince('tg:100', '2024-01-01T00:00:00.000Z', 'Andy');
     const botMsgs = msgs.filter((m) => m.content === 'bot reply');
     expect(botMsgs).toHaveLength(0);
   });
@@ -223,11 +215,7 @@ describe('getMessagesSince', () => {
       content: 'Andy: old bot reply',
       timestamp: '2024-01-01T00:00:05.000Z',
     });
-    const msgs = getMessagesSince(
-      'tg:100',
-      '2024-01-01T00:00:04.000Z',
-      'Andy',
-    );
+    const msgs = getMessagesSince('tg:100', '2024-01-01T00:00:04.000Z', 'Andy');
     expect(msgs).toHaveLength(0);
   });
 });
@@ -599,18 +587,10 @@ describe('getMessagesByReaction', () => {
   });
 
   it('filters by chatJid when provided', () => {
-    const results = getMessagesByReaction(
-      'tg:50',
-      '📌',
-      'tg:100',
-    );
+    const results = getMessagesByReaction('tg:50', '📌', 'tg:100');
     expect(results).toHaveLength(1);
 
-    const empty = getMessagesByReaction(
-      'tg:50',
-      '📌',
-      'tg:200',
-    );
+    const empty = getMessagesByReaction('tg:50', '📌', 'tg:200');
     expect(empty).toHaveLength(0);
   });
 

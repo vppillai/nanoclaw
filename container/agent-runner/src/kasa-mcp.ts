@@ -1,23 +1,37 @@
 /**
- * Kasa MCP Server — TP-Link Kasa cloud control
- * Provides tools to list, control, and query Kasa smart home devices.
+ * Kasa MCP Server — TP-Link Kasa smart home control (hybrid cloud + local)
+ *
+ * IOT.SMARTPLUGSWITCH devices: cloud API passthrough for status and control.
+ * SMART.KASASWITCH devices: cloud API for listing (with base64 alias decode),
+ * UDP discovery for real online status. Local KLAP control is not yet
+ * implemented (requires TCP access to devices on port 80).
  */
 
+import dgram from 'dgram';
 import { McpServer } from '@modelcontextprotocol/sdk/server/mcp.js';
 import { StdioServerTransport } from '@modelcontextprotocol/sdk/server/stdio.js';
 import { z } from 'zod';
 
-const KASA_API = 'https://wap.tplinkcloud.com';
 const APP_TYPE = 'Kasa_Android';
 const TERMINAL_UUID = 'nanoclaw-kasa-mcp';
+const DISCOVERY_TIMEOUT_MS = 3000;
 
 const username = process.env.KASA_USERNAME!;
 const password = process.env.KASA_PASSWORD!;
 
-let cachedToken: string | null = null;
+// ---------------------------------------------------------------------------
+// Cloud API
+// ---------------------------------------------------------------------------
 
-async function kasaRequest(body: object): Promise<unknown> {
-  const res = await fetch(KASA_API, {
+interface CloudLogin {
+  token: string;
+  apiUrl: string;
+}
+
+let cachedLogin: CloudLogin | null = null;
+
+async function kasaRequest(apiUrl: string, body: object): Promise<unknown> {
+  const res = await fetch(apiUrl, {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify(body),
@@ -28,44 +42,263 @@ async function kasaRequest(body: object): Promise<unknown> {
   return data.result;
 }
 
-async function getToken(): Promise<string> {
-  if (cachedToken) return cachedToken;
-  const result = (await kasaRequest({
+async function login(): Promise<CloudLogin> {
+  if (cachedLogin) return cachedLogin;
+
+  // Login to default endpoint first to discover the regional server
+  const defaultApi = 'https://wap.tplinkcloud.com';
+  const result = (await kasaRequest(defaultApi, {
     method: 'login',
     params: { appType: APP_TYPE, cloudUserName: username, cloudPassword: password, terminalUUID: TERMINAL_UUID },
   })) as { token: string };
-  cachedToken = result.token;
-  return cachedToken;
+
+  // Get device list to find the regional appServerUrl
+  const devResult = (await kasaRequest(defaultApi, {
+    method: 'getDeviceList',
+    params: { token: result.token },
+  })) as { deviceList: CloudDevice[] };
+
+  // Find a regional server URL (prefer the one with isSameRegion=true)
+  let regionalUrl = defaultApi;
+  for (const d of devResult.deviceList) {
+    if (d.appServerUrl && d.appServerUrl !== defaultApi) {
+      regionalUrl = d.appServerUrl;
+      break;
+    }
+  }
+
+  // Re-login to regional server if different
+  if (regionalUrl !== defaultApi) {
+    const regional = (await kasaRequest(regionalUrl, {
+      method: 'login',
+      params: { appType: APP_TYPE, cloudUserName: username, cloudPassword: password, terminalUUID: TERMINAL_UUID },
+    })) as { token: string };
+    cachedLogin = { token: regional.token, apiUrl: regionalUrl };
+  } else {
+    cachedLogin = { token: result.token, apiUrl: defaultApi };
+  }
+
+  return cachedLogin;
 }
 
-interface KasaDevice {
+interface CloudDevice {
   deviceId: string;
   alias: string;
   deviceType: string;
   deviceModel: string;
+  deviceMac: string;
   status: number;
   appServerUrl: string;
+  isSameRegion?: boolean;
 }
 
-async function getDevices(): Promise<KasaDevice[]> {
-  const token = await getToken();
-  const result = (await kasaRequest({
+async function getCloudDevices(): Promise<CloudDevice[]> {
+  const { token, apiUrl } = await login();
+  const result = (await kasaRequest(apiUrl, {
     method: 'getDeviceList',
     params: { token },
-  })) as { deviceList: KasaDevice[] };
+  })) as { deviceList: CloudDevice[] };
   return result.deviceList;
 }
 
-async function passthrough(device: KasaDevice, command: object): Promise<unknown> {
-  const token = await getToken();
-  const result = (await kasaRequest({
+async function passthrough(device: MergedDevice, command: object): Promise<unknown> {
+  const { token, apiUrl } = await login();
+  const result = (await kasaRequest(apiUrl, {
     method: 'passthrough',
     params: { token, deviceId: device.deviceId, requestData: JSON.stringify(command) },
   })) as { responseData: string };
   return JSON.parse(result.responseData);
 }
 
-function findDevice(devices: KasaDevice[], query: string): KasaDevice {
+// ---------------------------------------------------------------------------
+// UDP Discovery (works even when TCP is blocked)
+// ---------------------------------------------------------------------------
+
+interface DiscoveredDevice {
+  ip: string;
+  mac: string;
+  model: string;
+  deviceType: string;
+  alias?: string;
+  relayState?: number;
+}
+
+/** XOR-encrypt/decrypt for IOT protocol (port 9999). */
+function xorEncrypt(input: string): Buffer {
+  const buf = Buffer.alloc(input.length);
+  let key = 171;
+  for (let i = 0; i < input.length; i++) {
+    const b = key ^ input.charCodeAt(i);
+    key = b;
+    buf[i] = b;
+  }
+  return buf;
+}
+
+function xorDecrypt(buf: Buffer): string {
+  let result = '';
+  let key = 171;
+  for (let i = 0; i < buf.length; i++) {
+    result += String.fromCharCode(key ^ buf[i]);
+    key = buf[i];
+  }
+  return result;
+}
+
+function normalizeMac(mac: string): string {
+  return mac.replace(/[-:]/g, '').toUpperCase();
+}
+
+async function discoverDevices(): Promise<DiscoveredDevice[]> {
+  const devices: DiscoveredDevice[] = [];
+
+  await Promise.all([discoverIOT(devices), discoverSMART(devices)]);
+
+  return devices;
+}
+
+/** Discover IOT devices via encrypted UDP broadcast on port 9999. */
+function discoverIOT(devices: DiscoveredDevice[]): Promise<void> {
+  return new Promise((resolve) => {
+    const sock = dgram.createSocket({ type: 'udp4', reuseAddr: true });
+    const cmd = JSON.stringify({ system: { get_sysinfo: {} } });
+    const payload = xorEncrypt(cmd);
+
+    sock.on('message', (msg, rinfo) => {
+      try {
+        const json = JSON.parse(xorDecrypt(msg));
+        const sys = json.system?.get_sysinfo;
+        if (sys) {
+          devices.push({
+            ip: rinfo.address,
+            mac: normalizeMac(sys.mac || ''),
+            model: sys.model || '',
+            deviceType: sys.type || sys.mic_type || 'IOT.SMARTPLUGSWITCH',
+            alias: sys.alias,
+            relayState: sys.relay_state,
+          });
+        }
+      } catch { /* ignore malformed */ }
+    });
+
+    sock.bind(() => {
+      sock.setBroadcast(true);
+      sock.send(payload, 0, payload.length, 9999, '255.255.255.255');
+      setTimeout(() => { sock.close(); resolve(); }, DISCOVERY_TIMEOUT_MS);
+    });
+  });
+}
+
+/** Discover SMART devices via JSON UDP broadcast on port 20002. */
+function discoverSMART(devices: DiscoveredDevice[]): Promise<void> {
+  return new Promise((resolve) => {
+    const sock = dgram.createSocket({ type: 'udp4', reuseAddr: true });
+    const payload = Buffer.from('\x02');
+
+    sock.on('message', (msg, rinfo) => {
+      try {
+        // Skip the first 16 bytes (header) then parse JSON
+        // SMART discovery responses have a 16-byte header before JSON
+        let json: any;
+        try {
+          json = JSON.parse(msg.toString());
+        } catch {
+          // Try skipping header bytes
+          for (let offset = 1; offset < Math.min(32, msg.length); offset++) {
+            try {
+              json = JSON.parse(msg.subarray(offset).toString());
+              break;
+            } catch { /* try next offset */ }
+          }
+        }
+        const result = json?.result;
+        if (result?.device_type?.startsWith('SMART.')) {
+          devices.push({
+            ip: rinfo.address,
+            mac: normalizeMac(result.mac || ''),
+            model: result.device_model || '',
+            deviceType: result.device_type,
+          });
+        }
+      } catch { /* ignore malformed */ }
+    });
+
+    sock.bind(() => {
+      sock.setBroadcast(true);
+      sock.send(payload, 0, payload.length, 20002, '255.255.255.255');
+      setTimeout(() => { sock.close(); resolve(); }, DISCOVERY_TIMEOUT_MS);
+    });
+  });
+}
+
+// ---------------------------------------------------------------------------
+// Merged Device View
+// ---------------------------------------------------------------------------
+
+interface MergedDevice {
+  deviceId: string;
+  alias: string;
+  deviceType: string;
+  deviceModel: string;
+  cloudStatus: number;
+  localIp: string | null;
+  locallyReachable: boolean;
+  relayState: number | null;
+  isSmartDevice: boolean;
+}
+
+function decodeAlias(alias: string, deviceType: string): string {
+  if (!deviceType.startsWith('SMART.')) return alias;
+  try {
+    const decoded = Buffer.from(alias, 'base64').toString('utf8');
+    // Sanity check: base64 decode of a normal string would produce garbage
+    if (/^[\x20-\x7E]+$/.test(decoded) && decoded.length > 0) return decoded.trim();
+  } catch { /* not base64 */ }
+  return alias;
+}
+
+let cachedDevices: MergedDevice[] | null = null;
+let cacheTime = 0;
+const CACHE_TTL_MS = 30_000;
+
+async function getDevices(): Promise<MergedDevice[]> {
+  if (cachedDevices && Date.now() - cacheTime < CACHE_TTL_MS) return cachedDevices;
+
+  const [cloudDevices, localDevices] = await Promise.all([
+    getCloudDevices(),
+    discoverDevices().catch(() => [] as DiscoveredDevice[]),
+  ]);
+
+  // Build MAC → local device lookup
+  const localByMac = new Map<string, DiscoveredDevice>();
+  for (const d of localDevices) {
+    if (d.mac) localByMac.set(d.mac, d);
+  }
+
+  const merged: MergedDevice[] = cloudDevices.map((cd) => {
+    const mac = normalizeMac(cd.deviceMac || '');
+    const local = localByMac.get(mac);
+    const isSmartDevice = cd.deviceType.startsWith('SMART.');
+
+    return {
+      deviceId: cd.deviceId,
+      alias: decodeAlias(cd.alias, cd.deviceType),
+      deviceType: cd.deviceType,
+      deviceModel: cd.deviceModel,
+      cloudStatus: cd.status,
+      localIp: local?.ip ?? null,
+      locallyReachable: !!local,
+      relayState: local?.relayState ?? null,
+      isSmartDevice,
+    };
+  });
+
+  cachedDevices = merged;
+  cacheTime = Date.now();
+  return merged;
+}
+
+function findDevice(devices: MergedDevice[], query: string): MergedDevice {
   const q = query.toLowerCase();
   const match = devices.find(
     (d) => d.deviceId === query || d.alias.toLowerCase() === q || d.alias.toLowerCase().includes(q),
@@ -77,19 +310,35 @@ function findDevice(devices: KasaDevice[], query: string): KasaDevice {
   return match;
 }
 
-const server = new McpServer({ name: 'kasa', version: '1.0.0' });
+// ---------------------------------------------------------------------------
+// MCP Tools
+// ---------------------------------------------------------------------------
+
+const server = new McpServer({ name: 'kasa', version: '2.0.0' });
 
 server.tool(
   'kasa_list_devices',
-  'List all Kasa smart home devices with their names, IDs, and online status.',
+  'List all Kasa smart home devices with their names, models, and status.',
   {},
   async () => {
     try {
       const devices = await getDevices();
       if (devices.length === 0) return { content: [{ type: 'text' as const, text: 'No Kasa devices found.' }] };
-      const lines = devices.map(
-        (d) => `- ${d.alias} (${d.deviceModel}) — ${d.status === 1 ? 'online' : 'offline'} [id: ${d.deviceId}]`,
-      );
+
+      const lines = devices.map((d) => {
+        let status: string;
+        if (d.cloudStatus === 1) {
+          status = d.relayState === 1 ? 'on' : d.relayState === 0 ? 'off' : 'online';
+        } else if (d.locallyReachable) {
+          status = d.relayState === 1 ? 'on' : d.relayState === 0 ? 'off' : 'reachable';
+        } else {
+          status = 'offline';
+        }
+        const ip = d.localIp ? ` @ ${d.localIp}` : '';
+        const smart = d.isSmartDevice ? ' [SMART]' : '';
+        return `- ${d.alias} (${d.deviceModel}) — ${status}${ip}${smart}`;
+      });
+
       return { content: [{ type: 'text' as const, text: lines.join('\n') }] };
     } catch (err) {
       return { content: [{ type: 'text' as const, text: `Error: ${err instanceof Error ? err.message : String(err)}` }], isError: true };
@@ -99,7 +348,7 @@ server.tool(
 
 server.tool(
   'kasa_set_power',
-  'Turn a Kasa device on or off.',
+  'Turn a Kasa device on or off. Works for IOT devices via cloud. SMART devices require local network access.',
   {
     device: z.string().describe('Device name or ID (partial match supported)'),
     on: z.boolean().describe('true to turn on, false to turn off'),
@@ -108,8 +357,21 @@ server.tool(
     try {
       const devices = await getDevices();
       const device = findDevice(devices, args.device);
+
+      if (device.isSmartDevice) {
+        return {
+          content: [{
+            type: 'text' as const,
+            text: `${device.alias} is a SMART protocol device — cloud control is not supported for this device type. ` +
+              `Local KLAP control requires TCP access on port 80 (currently blocked by network configuration).`,
+          }],
+          isError: true,
+        };
+      }
+
       const state = args.on ? 1 : 0;
       await passthrough(device, { system: { set_relay_state: { state } } });
+      cachedDevices = null; // invalidate cache
       return { content: [{ type: 'text' as const, text: `${device.alias} turned ${args.on ? 'on' : 'off'}.` }] };
     } catch (err) {
       return { content: [{ type: 'text' as const, text: `Error: ${err instanceof Error ? err.message : String(err)}` }], isError: true };
@@ -119,7 +381,7 @@ server.tool(
 
 server.tool(
   'kasa_set_brightness',
-  'Set brightness on a dimmable Kasa device (bulb or dimmer switch). Also turns the device on if it is off.',
+  'Set brightness on a dimmable Kasa device (bulb or dimmer switch). Also turns the device on. IOT devices only.',
   {
     device: z.string().describe('Device name or ID (partial match supported)'),
     brightness: z.number().min(1).max(100).describe('Brightness level 1–100'),
@@ -128,8 +390,21 @@ server.tool(
     try {
       const devices = await getDevices();
       const device = findDevice(devices, args.device);
+
+      if (device.isSmartDevice) {
+        return {
+          content: [{
+            type: 'text' as const,
+            text: `${device.alias} is a SMART protocol device — cloud brightness control is not supported. ` +
+              `Local KLAP control requires TCP access on port 80.`,
+          }],
+          isError: true,
+        };
+      }
+
       await passthrough(device, { 'smartlife.iot.dimmer': { set_brightness: { brightness: args.brightness } } });
       await passthrough(device, { system: { set_relay_state: { state: 1 } } });
+      cachedDevices = null;
       return { content: [{ type: 'text' as const, text: `${device.alias} brightness set to ${args.brightness}%.` }] };
     } catch (err) {
       return { content: [{ type: 'text' as const, text: `Error: ${err instanceof Error ? err.message : String(err)}` }], isError: true };
@@ -139,7 +414,7 @@ server.tool(
 
 server.tool(
   'kasa_get_device_info',
-  'Get the current status and details of a Kasa device (power state, brightness, voltage, current, etc.).',
+  'Get the current status and details of a Kasa device (power state, brightness, voltage, current, etc.). IOT devices get full info from cloud; SMART devices show discovery data.',
   {
     device: z.string().describe('Device name or ID (partial match supported)'),
   },
@@ -147,6 +422,20 @@ server.tool(
     try {
       const devices = await getDevices();
       const device = findDevice(devices, args.device);
+
+      if (device.isSmartDevice) {
+        const info = {
+          alias: device.alias,
+          model: device.deviceModel,
+          type: device.deviceType,
+          localIp: device.localIp,
+          locallyReachable: device.locallyReachable,
+          cloudStatus: device.cloudStatus === 1 ? 'online' : 'cloud-offline',
+          note: 'SMART device — full sysinfo requires local KLAP access (TCP port 80).',
+        };
+        return { content: [{ type: 'text' as const, text: JSON.stringify(info, null, 2) }] };
+      }
+
       const info = await passthrough(device, { system: { get_sysinfo: {} } });
       return { content: [{ type: 'text' as const, text: JSON.stringify(info, null, 2) }] };
     } catch (err) {

@@ -11,11 +11,7 @@
  * Code blocks (fenced and inline) are NEVER transformed by marker substitution.
  */
 
-export type ChannelType =
-  | 'signal'
-  | 'telegram'
-  | 'slack'
-  | 'discord';
+export type ChannelType = 'signal' | 'telegram' | 'slack' | 'discord';
 
 /** Transform Markdown text for the target channel's native format. */
 export function parseTextStyles(text: string, channel: ChannelType): string {
