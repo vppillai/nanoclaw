@@ -36,7 +36,7 @@ describe('database migrations', () => {
         .prepare(
           `INSERT INTO chats (jid, name, last_message_time) VALUES (?, ?, ?)`,
         )
-        .run('room@g.us', 'WhatsApp Group', '2024-01-01T00:00:02.000Z');
+        .run('dc:12345', 'Discord Group', '2024-01-01T00:00:02.000Z');
       legacyDb.close();
 
       vi.resetModules();
@@ -54,8 +54,8 @@ describe('database migrations', () => {
         channel: 'telegram',
         is_group: 0,
       });
-      expect(chats.find((chat) => chat.jid === 'room@g.us')).toMatchObject({
-        channel: 'whatsapp',
+      expect(chats.find((chat) => chat.jid === 'dc:12345')).toMatchObject({
+        channel: 'discord',
         is_group: 1,
       });
 
