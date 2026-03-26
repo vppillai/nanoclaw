@@ -429,7 +429,6 @@ async function runQuery(
         'TodoWrite', 'ToolSearch', 'Skill',
         'NotebookEdit',
         'mcp__nanoclaw__*',
-        'mcp__kasa__*',
         'mcp__mysa__*',
         'mcp__gcal__*',
         'mcp__maps__*',
@@ -449,18 +448,6 @@ async function runQuery(
             NANOCLAW_IS_MAIN: containerInput.isMain ? '1' : '0',
           },
         },
-        ...(process.env.KASA_USERNAME && process.env.KASA_PASSWORD
-          ? {
-              kasa: {
-                command: 'node',
-                args: [path.join(path.dirname(mcpServerPath), 'kasa-mcp.js')],
-                env: {
-                  KASA_USERNAME: process.env.KASA_USERNAME,
-                  KASA_PASSWORD: process.env.KASA_PASSWORD,
-                },
-              },
-            }
-          : {}),
         ...(process.env.MYSA_EMAIL && process.env.MYSA_PASSWORD
           ? {
               mysa: {
