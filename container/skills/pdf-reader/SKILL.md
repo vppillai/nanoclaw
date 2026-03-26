@@ -1,6 +1,6 @@
 ---
 name: pdf-reader
-description: Read and extract text from PDF files — documents, reports, contracts, spreadsheets. Use whenever you need to read PDF content, not just when explicitly asked. Handles local files, URLs, and WhatsApp attachments.
+description: Read and extract text from PDF files — documents, reports, contracts, spreadsheets. Use whenever you need to read PDF content, not just when explicitly asked. Handles local files, URLs, and message attachments.
 allowed-tools: Bash(pdf-reader:*)
 ---
 
@@ -57,9 +57,9 @@ pdf-reader list
 
 Recursively lists all `.pdf` files with page count and file size.
 
-## WhatsApp PDF attachments
+## PDF attachments
 
-When a user sends a PDF on WhatsApp, it is automatically saved to the `attachments/` directory. The message will include a path hint like:
+When a user sends a PDF, it is automatically saved to the `attachments/` directory. The message will include a path hint like:
 
 > [PDF attached: attachments/document.pdf]
 

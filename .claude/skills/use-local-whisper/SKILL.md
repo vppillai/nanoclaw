@@ -1,19 +1,19 @@
 ---
 name: use-local-whisper
-description: Use when the user wants local voice transcription instead of OpenAI Whisper API. Switches to whisper.cpp running on Apple Silicon. WhatsApp only for now. Requires voice-transcription skill to be applied first.
+description: Use when the user wants local voice transcription instead of OpenAI Whisper API. Switches to whisper.cpp running on Apple Silicon. Telegram only for now. Requires voice-transcription skill to be applied first.
 ---
 
 # Use Local Whisper
 
 Switches voice transcription from OpenAI's Whisper API to local whisper.cpp. Runs entirely on-device — no API key, no network, no cost.
 
-**Channel support:** Currently WhatsApp only. The transcription module (`src/transcription.ts`) uses Baileys types for audio download. Other channels (Telegram, Discord, etc.) would need their own audio-download logic before this skill can serve them.
+**Channel support:** Currently Telegram only. The transcription module (`src/transcription.ts`) handles audio download from Telegram voice messages.
 
 **Note:** The Homebrew package is `whisper-cpp`, but the CLI binary it installs is `whisper-cli`.
 
 ## Prerequisites
 
-- `voice-transcription` skill must be applied first (WhatsApp channel)
+- `voice-transcription` skill must be applied first (Telegram channel)
 - macOS with Apple Silicon (M1+) recommended
 - `whisper-cpp` installed: `brew install whisper-cpp` (provides the `whisper-cli` binary)
 - `ffmpeg` installed: `brew install ffmpeg`
@@ -59,23 +59,23 @@ For better accuracy at the cost of speed, use `ggml-small.bin` (466MB) or `ggml-
 
 ## Phase 2: Apply Code Changes
 
-### Ensure WhatsApp fork remote
+### Ensure upstream fork remote
 
 ```bash
 git remote -v
 ```
 
-If `whatsapp` is missing, add it:
+
 
 ```bash
-git remote add whatsapp https://github.com/qwibitai/nanoclaw-whatsapp.git
+
 ```
 
 ### Merge the skill branch
 
 ```bash
-git fetch whatsapp skill/local-whisper
-git merge whatsapp/skill/local-whisper || {
+
+
   git checkout --theirs package-lock.json
   git add package-lock.json
   git merge --continue

@@ -38,7 +38,7 @@ Use the MCP tool `send_message` with:
 - `text`: Brief description (optional for audio)
 - `media_path`: The full path from step 1 (prefix with `/workspace/group/` if relative)
 
-Audio files are sent as WhatsApp voice notes automatically.
+Audio files are sent as voice messages automatically.
 
 ## Voice selection
 

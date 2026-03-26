@@ -61,7 +61,7 @@ Skills are hot-loaded after `claude plugin install` — no restart needed. This 
 
 `/setup` asks users what channels they want, then only offers relevant skills:
 
-1. "Which messaging channels do you want to use?" → Discord, Telegram, Slack, WhatsApp
+1. "Which messaging channels do you want to use?" → Discord, Telegram, Slack, Gmail
 2. User picks Telegram → Claude installs the plugin and runs `/add-telegram`
 3. After Telegram is set up: "Want to add Agent Swarm support for Telegram?" → offers `/add-telegram-swarm`
 4. "Want to enable community skills?" → installs community marketplace plugins
@@ -508,18 +508,17 @@ Migration from the old skills engine to branches is complete. All feature skills
 
 | Branch | Base | Description |
 |--------|------|-------------|
-| `skill/whatsapp` | `main` | WhatsApp channel |
 | `skill/telegram` | `main` | Telegram channel |
 | `skill/slack` | `main` | Slack channel |
 | `skill/discord` | `main` | Discord channel |
 | `skill/gmail` | `main` | Gmail channel |
-| `skill/voice-transcription` | `skill/whatsapp` | OpenAI Whisper voice transcription |
-| `skill/image-vision` | `skill/whatsapp` | Image attachment processing |
-| `skill/pdf-reader` | `skill/whatsapp` | PDF attachment reading |
+| `skill/voice-transcription` | `skill/telegram` | OpenAI Whisper voice transcription |
+| `skill/image-vision` | `skill/telegram` | Image attachment processing |
+| `skill/pdf-reader` | `skill/telegram` | PDF attachment reading |
 | `skill/local-whisper` | `skill/voice-transcription` | Local whisper.cpp transcription |
 | `skill/ollama-tool` | `main` | Ollama MCP server for local models |
 | `skill/apple-container` | `main` | Apple Container runtime |
-| `skill/reactions` | `main` | WhatsApp emoji reactions |
+| `skill/reactions` | `main` | Emoji reactions |
 
 ### What was removed
 
@@ -559,8 +558,8 @@ Updates to the setup flow:
 - Check if `upstream` remote exists; if not, add it: `git remote add upstream https://github.com/qwibitai/nanoclaw.git`
 - Check if `origin` points to the user's fork (not qwibitai). If it points to qwibitai, guide them through the fork migration.
 - **Install marketplace plugin:** `claude plugin install nanoclaw-skills@nanoclaw-skills --scope project` — makes all feature skills available (hot-loaded, no restart)
-- **Ask which channels to add:** present channel options (Discord, Telegram, Slack, WhatsApp, Gmail), run corresponding `/add-*` skills for selected channels
-- **Offer dependent skills:** after a channel is set up, offer relevant add-ons (e.g., Agent Swarm after Telegram, voice transcription after WhatsApp)
+- **Ask which channels to add:** present channel options (Discord, Telegram, Slack, Gmail), run corresponding `/add-*` skills for selected channels
+- **Offer dependent skills:** after a channel is set up, offer relevant add-ons (e.g., Agent Swarm after Telegram, voice transcription after Telegram)
 - **Optionally enable community marketplaces:** ask if the user wants community skills, install those marketplace plugins too
 
 ### `.claude/settings.json`

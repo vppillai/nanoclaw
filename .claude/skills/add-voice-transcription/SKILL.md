@@ -1,11 +1,11 @@
 ---
 name: add-voice-transcription
-description: Add voice message transcription to NanoClaw using OpenAI's Whisper API. Automatically transcribes WhatsApp voice notes so the agent can read and respond to them.
+description: Add voice message transcription to NanoClaw using OpenAI's Whisper API. Automatically transcribes voice messages so the agent can read and respond to them.
 ---
 
 # Add Voice Transcription
 
-This skill adds automatic voice message transcription to NanoClaw's WhatsApp channel using OpenAI's Whisper API. When a voice note arrives, it is downloaded, transcribed, and delivered to the agent as `[Voice: <transcript>]`.
+This skill adds automatic voice message transcription to NanoClaw's Telegram channel using OpenAI's Whisper API. When a voice note arrives, it is downloaded, transcribed, and delivered to the agent as `[Voice: <transcript>]`.
 
 ## Phase 1: Pre-flight
 
@@ -23,25 +23,25 @@ If yes, collect it now. If no, direct them to create one at https://platform.ope
 
 ## Phase 2: Apply Code Changes
 
-**Prerequisite:** WhatsApp must be installed first (`skill/whatsapp` merged). This skill modifies WhatsApp channel files.
+**Prerequisite:** Telegram must be installed first (`skill/telegram` merged). This skill modifies Telegram channel files.
 
-### Ensure WhatsApp fork remote
+### Ensure upstream fork remote
 
 ```bash
 git remote -v
 ```
 
-If `whatsapp` is missing, add it:
+
 
 ```bash
-git remote add whatsapp https://github.com/qwibitai/nanoclaw-whatsapp.git
+
 ```
 
 ### Merge the skill branch
 
 ```bash
-git fetch whatsapp skill/voice-transcription
-git merge whatsapp/skill/voice-transcription || {
+
+
   git checkout --theirs package-lock.json
   git add package-lock.json
   git merge --continue
@@ -50,8 +50,8 @@ git merge whatsapp/skill/voice-transcription || {
 
 This merges in:
 - `src/transcription.ts` (voice transcription module using OpenAI Whisper)
-- Voice handling in `src/channels/whatsapp.ts` (isVoiceMessage check, transcribeAudioMessage call)
-- Transcription tests in `src/channels/whatsapp.test.ts`
+- Voice handling in `src/channels/telegram.ts` (isVoiceMessage check, transcribeAudioMessage call)
+- Transcription tests in `src/channels/telegram.test.ts`
 - `openai` npm dependency in `package.json`
 - `OPENAI_API_KEY` in `.env.example`
 
@@ -62,7 +62,7 @@ If the merge reports conflicts, resolve them by reading the conflicted files and
 ```bash
 npm install --legacy-peer-deps
 npm run build
-npx vitest run src/channels/whatsapp.test.ts
+npx vitest run src/channels/telegram.test.ts
 ```
 
 All tests must pass and build must be clean before proceeding.
@@ -114,7 +114,7 @@ launchctl kickstart -k gui/$(id -u)/com.nanoclaw  # macOS
 
 Tell the user:
 
-> Send a voice note in any registered WhatsApp chat. The agent should receive it as `[Voice: <transcript>]` and respond to its content.
+> Send a voice note in any registered Telegram chat. The agent should receive it as `[Voice: <transcript>]` and respond to its content.
 
 ### Check logs if needed
 

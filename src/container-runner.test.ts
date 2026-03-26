@@ -98,7 +98,7 @@ const testGroup: RegisteredGroup = {
 const testInput = {
   prompt: 'Hello',
   groupFolder: 'test-group',
-  chatJid: 'test@g.us',
+  chatJid: 'tg:100',
   isMain: false,
 };
 

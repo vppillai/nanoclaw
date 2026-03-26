@@ -1,11 +1,11 @@
 ---
 name: add-reactions
-description: Add WhatsApp emoji reaction support — receive, send, store, and search reactions.
+description: Add emoji reaction support — receive, send, store, and search reactions.
 ---
 
 # Add Reactions
 
-This skill adds emoji reaction support to NanoClaw's WhatsApp channel: receive and store reactions, send reactions from the container agent via MCP tool, and query reaction history from SQLite.
+This skill adds emoji reaction support to NanoClaw's Telegram channel: receive and store reactions, send reactions from the container agent via MCP tool, and query reaction history from SQLite.
 
 ## Phase 1: Pre-flight
 
@@ -21,23 +21,23 @@ If already applied, skip to Phase 3 (Verify).
 
 ## Phase 2: Apply Code Changes
 
-### Ensure WhatsApp fork remote
+### Ensure upstream fork remote
 
 ```bash
 git remote -v
 ```
 
-If `whatsapp` is missing, add it:
+
 
 ```bash
-git remote add whatsapp https://github.com/qwibitai/nanoclaw-whatsapp.git
+
 ```
 
 ### Merge the skill branch
 
 ```bash
-git fetch whatsapp skill/reactions
-git merge whatsapp/skill/reactions || {
+
+
   git checkout --theirs package-lock.json
   git add package-lock.json
   git merge --continue
@@ -49,7 +49,7 @@ This adds:
 - `src/status-tracker.ts` (forward-only emoji state machine for message lifecycle signaling, with persistence and retry)
 - `src/status-tracker.test.ts` (unit tests for StatusTracker)
 - `container/skills/reactions/SKILL.md` (agent-facing documentation for the `react_to_message` MCP tool)
-- Reaction support in `src/db.ts`, `src/channels/whatsapp.ts`, `src/types.ts`, `src/ipc.ts`, `src/index.ts`, `src/group-queue.ts`, and `container/agent-runner/src/ipc-mcp-stdio.ts`
+- Reaction support in `src/db.ts`, `src/channels/telegram.ts`, `src/types.ts`, `src/ipc.ts`, `src/index.ts`, `src/group-queue.ts`, and `container/agent-runner/src/ipc-mcp-stdio.ts`
 
 ### Run database migration
 
@@ -87,7 +87,7 @@ launchctl kickstart -k gui/$(id -u)/com.nanoclaw
 ### Test receiving reactions
 
 1. Send a message from your phone
-2. React to it with an emoji on WhatsApp
+2. React to it with an emoji on Telegram
 3. Check the database:
 
 ```bash
@@ -114,4 +114,4 @@ Ask the agent to react to a message via the `react_to_message` MCP tool. Check y
 ### Agent can't send reactions
 
 - Check IPC logs for `Unauthorized IPC reaction attempt blocked` — the agent can only react in its own group's chat
-- Verify WhatsApp is connected: check logs for connection status
+- Verify Telegram is connected: check logs for connection status

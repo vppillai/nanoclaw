@@ -1,36 +1,36 @@
 ---
 name: add-pdf-reader
-description: Add PDF reading to NanoClaw agents. Extracts text from PDFs via pdftotext CLI. Handles WhatsApp attachments, URLs, and local files.
+description: Add PDF reading to NanoClaw agents. Extracts text from PDFs via pdftotext CLI. Handles attachments, URLs, and local files.
 ---
 
 # Add PDF Reader
 
-Adds PDF reading capability to all container agents using poppler-utils (pdftotext/pdfinfo). PDFs sent as WhatsApp attachments are auto-downloaded to the group workspace.
+Adds PDF reading capability to all container agents using poppler-utils (pdftotext/pdfinfo). PDFs sent as attachments are auto-downloaded to the group workspace.
 
 ## Phase 1: Pre-flight
 
 1. Check if `container/skills/pdf-reader/pdf-reader` exists — skip to Phase 3 if already applied
-2. Confirm WhatsApp is installed first (`skill/whatsapp` merged). This skill modifies WhatsApp channel files.
+2. Confirm Telegram is installed first (`skill/telegram` merged). This skill modifies Telegram channel files.
 
 ## Phase 2: Apply Code Changes
 
-### Ensure WhatsApp fork remote
+### Ensure upstream fork remote
 
 ```bash
 git remote -v
 ```
 
-If `whatsapp` is missing, add it:
+
 
 ```bash
-git remote add whatsapp https://github.com/qwibitai/nanoclaw-whatsapp.git
+
 ```
 
 ### Merge the skill branch
 
 ```bash
-git fetch whatsapp skill/pdf-reader
-git merge whatsapp/skill/pdf-reader || {
+
+
   git checkout --theirs package-lock.json
   git add package-lock.json
   git merge --continue
@@ -41,8 +41,8 @@ This merges in:
 - `container/skills/pdf-reader/SKILL.md` (agent-facing documentation)
 - `container/skills/pdf-reader/pdf-reader` (CLI script)
 - `poppler-utils` in `container/Dockerfile`
-- PDF attachment download in `src/channels/whatsapp.ts`
-- PDF tests in `src/channels/whatsapp.test.ts`
+- PDF attachment download in `src/channels/telegram.ts`
+- PDF tests in `src/channels/telegram.test.ts`
 
 If the merge reports conflicts, resolve them by reading the conflicted files and understanding the intent of both sides.
 
@@ -50,7 +50,7 @@ If the merge reports conflicts, resolve them by reading the conflicted files and
 
 ```bash
 npm run build
-npx vitest run src/channels/whatsapp.test.ts
+npx vitest run src/channels/telegram.test.ts
 ```
 
 ### Rebuild container
@@ -70,7 +70,7 @@ launchctl kickstart -k gui/$(id -u)/com.nanoclaw  # macOS
 
 ### Test PDF extraction
 
-Send a PDF file in any registered WhatsApp chat. The agent should:
+Send a PDF file in any registered Telegram chat. The agent should:
 1. Download the PDF to `attachments/`
 2. Respond acknowledging the PDF
 3. Be able to extract text when asked
@@ -99,6 +99,6 @@ Container needs rebuilding. Run `./container/build.sh` and restart the service.
 
 The PDF may be scanned (image-based). pdftotext only handles text-based PDFs. Consider using the agent-browser to open the PDF visually instead.
 
-### WhatsApp PDF not detected
+### PDF not detected
 
 Verify the message has `documentMessage` with `mimetype: application/pdf`. Some file-sharing apps send PDFs as generic files without the correct mimetype.

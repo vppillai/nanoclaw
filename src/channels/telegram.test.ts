@@ -816,14 +816,14 @@ describe('TelegramChannel', () => {
       expect(channel.ownsJid('tg:-1001234567890')).toBe(true);
     });
 
-    it('does not own WhatsApp group JIDs', () => {
+    it('does not own non-tg JIDs', () => {
       const channel = new TelegramChannel('test-token', createTestOpts());
-      expect(channel.ownsJid('12345@g.us')).toBe(false);
+      expect(channel.ownsJid('dc:12345')).toBe(false);
     });
 
-    it('does not own WhatsApp DM JIDs', () => {
+    it('does not own plain number JIDs', () => {
       const channel = new TelegramChannel('test-token', createTestOpts());
-      expect(channel.ownsJid('12345@s.whatsapp.net')).toBe(false);
+      expect(channel.ownsJid('12345')).toBe(false);
     });
 
     it('does not own unknown JID formats', () => {

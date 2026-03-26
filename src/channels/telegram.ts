@@ -363,16 +363,27 @@ export class TelegramChannel implements Channel {
             const pdfRef = `[PDF: attachments/${safeName} (${sizeKB}KB)]\nUse: pdf-reader extract attachments/${safeName}`;
             const caption = ctx.message.caption || '';
             content = caption ? `${caption}\n\n${pdfRef}` : pdfRef;
-            logger.info({ chatJid, fileName: safeName }, 'Downloaded Telegram PDF attachment');
+            logger.info(
+              { chatJid, fileName: safeName },
+              'Downloaded Telegram PDF attachment',
+            );
           }
         } catch (err) {
           logger.warn({ err, chatJid }, 'Failed to download Telegram PDF');
         }
 
         const timestamp = new Date(ctx.message.date * 1000).toISOString();
-        const senderName = ctx.from?.first_name || ctx.from?.username || 'Unknown';
-        const isGroup = ctx.chat.type === 'group' || ctx.chat.type === 'supergroup';
-        this.opts.onChatMetadata(chatJid, timestamp, undefined, 'telegram', isGroup);
+        const senderName =
+          ctx.from?.first_name || ctx.from?.username || 'Unknown';
+        const isGroup =
+          ctx.chat.type === 'group' || ctx.chat.type === 'supergroup';
+        this.opts.onChatMetadata(
+          chatJid,
+          timestamp,
+          undefined,
+          'telegram',
+          isGroup,
+        );
         this.opts.onMessage(chatJid, {
           id: ctx.message.message_id.toString(),
           chat_jid: chatJid,

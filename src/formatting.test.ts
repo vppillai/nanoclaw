@@ -17,8 +17,8 @@ import { NewMessage } from './types.js';
 function makeMsg(overrides: Partial<NewMessage> = {}): NewMessage {
   return {
     id: '1',
-    chat_jid: 'group@g.us',
-    sender: '123@s.whatsapp.net',
+    chat_jid: 'tg:100',
+    sender: 'tg:123',
     sender_name: 'Alice',
     content: 'hello',
     timestamp: '2024-01-01T00:00:00.000Z',
@@ -309,8 +309,8 @@ describe('parseTextStyles — passthrough channels', () => {
 });
 
 describe('parseTextStyles — bold', () => {
-  it('converts **bold** to *bold* on whatsapp', () => {
-    expect(parseTextStyles('**hello**', 'whatsapp')).toBe('*hello*');
+  it('converts **bold** to *bold* on telegram', () => {
+    expect(parseTextStyles('**hello**', 'telegram')).toBe('*hello*');
   });
 
   it('converts **bold** to *bold* on telegram', () => {
@@ -324,13 +324,13 @@ describe('parseTextStyles — bold', () => {
   });
 
   it('does not convert a lone * as bold', () => {
-    expect(parseTextStyles('a * b * c', 'whatsapp')).toBe('a * b * c');
+    expect(parseTextStyles('a * b * c', 'telegram')).toBe('a * b * c');
   });
 });
 
 describe('parseTextStyles — italic', () => {
-  it('converts *italic* to _italic_ on whatsapp', () => {
-    expect(parseTextStyles('say *this* now', 'whatsapp')).toBe(
+  it('converts *italic* to _italic_ on telegram', () => {
+    expect(parseTextStyles('say *this* now', 'telegram')).toBe(
       'say _this_ now',
     );
   });
@@ -340,15 +340,15 @@ describe('parseTextStyles — italic', () => {
   });
 
   it('bold-before-italic: **bold** *italic* → *bold* _italic_', () => {
-    expect(parseTextStyles('**bold** *italic*', 'whatsapp')).toBe(
+    expect(parseTextStyles('**bold** *italic*', 'telegram')).toBe(
       '*bold* _italic_',
     );
   });
 });
 
 describe('parseTextStyles — headings', () => {
-  it('converts # heading on whatsapp', () => {
-    expect(parseTextStyles('# Top', 'whatsapp')).toBe('*Top*');
+  it('converts # heading on telegram', () => {
+    expect(parseTextStyles('# Top', 'telegram')).toBe('*Top*');
   });
 
   it('converts ## heading on telegram', () => {
@@ -361,13 +361,13 @@ describe('parseTextStyles — headings', () => {
 
   it('only converts headings at line start', () => {
     const input = 'not a ## heading in middle';
-    expect(parseTextStyles(input, 'whatsapp')).toBe(input);
+    expect(parseTextStyles(input, 'telegram')).toBe(input);
   });
 });
 
 describe('parseTextStyles — links', () => {
-  it('converts [text](url) to text (url) on whatsapp', () => {
-    expect(parseTextStyles('[Link](https://example.com)', 'whatsapp')).toBe(
+  it('converts [text](url) to text (url) on telegram', () => {
+    expect(parseTextStyles('[Link](https://example.com)', 'telegram')).toBe(
       'Link (https://example.com)',
     );
   });
@@ -392,8 +392,8 @@ describe('parseTextStyles — horizontal rules', () => {
     );
   });
 
-  it('strips *** on whatsapp', () => {
-    expect(parseTextStyles('above\n***\nbelow', 'whatsapp')).toBe(
+  it('strips *** on telegram', () => {
+    expect(parseTextStyles('above\n***\nbelow', 'telegram')).toBe(
       'above\n\nbelow',
     );
   });
@@ -402,7 +402,7 @@ describe('parseTextStyles — horizontal rules', () => {
 describe('parseTextStyles — code block protection', () => {
   it('does not transform **bold** inside fenced code block', () => {
     const input = '```\n**not bold**\n```';
-    expect(parseTextStyles(input, 'whatsapp')).toBe(input);
+    expect(parseTextStyles(input, 'telegram')).toBe(input);
   });
 
   it('does not transform *italic* inside inline code', () => {
@@ -412,7 +412,7 @@ describe('parseTextStyles — code block protection', () => {
 
   it('transforms text outside code blocks but not inside', () => {
     const input = '**bold** and `*code*` and *italic*';
-    expect(parseTextStyles(input, 'whatsapp')).toBe(
+    expect(parseTextStyles(input, 'telegram')).toBe(
       '*bold* and `*code*` and _italic_',
     );
   });
@@ -532,7 +532,7 @@ describe('parseSignalStyles — snake_case guard', () => {
 
 describe('formatOutbound — channel-aware', () => {
   it('applies parseTextStyles when channel is provided', () => {
-    expect(formatOutbound('**bold**', 'whatsapp')).toBe('*bold*');
+    expect(formatOutbound('**bold**', 'telegram')).toBe('*bold*');
   });
 
   it('returns plain stripped text when no channel provided', () => {

@@ -24,7 +24,7 @@ Instead of application-level permission systems trying to prevent agents from ac
 
 ### Built for the Individual User
 
-This isn't a framework or a platform. It's software that fits each user's exact needs. You fork the repo, add the channels you want (WhatsApp, Telegram, Discord, Slack, Gmail), and end up with clean code that does exactly what you need.
+This isn't a framework or a platform. It's software that fits each user's exact needs. You fork the repo, add the channels you want (Telegram, Discord, Slack, Gmail), and end up with clean code that does exactly what you need.
 
 ### Customization = Code Changes
 
@@ -38,7 +38,7 @@ The codebase assumes you have an AI collaborator. It doesn't need to be excessiv
 
 ### Skills Over Features
 
-When people contribute, they shouldn't add "Telegram support alongside WhatsApp." They should contribute a skill like `/add-telegram` that transforms the codebase. Users fork the repo, run skills to customize, and end up with clean code that does exactly what they need - not a bloated system trying to support everyone's use case simultaneously.
+When people contribute, they shouldn't add "Slack support alongside Telegram." They should contribute a skill like `/add-slack` that transforms the codebase. Users fork the repo, run skills to customize, and end up with clean code that does exactly what they need - not a bloated system trying to support everyone's use case simultaneously.
 
 ---
 
@@ -61,7 +61,7 @@ A personal Claude assistant accessible via messaging, with minimal custom code.
 **Core components:**
 - **Claude Agent SDK** as the core agent
 - **Containers** for isolated agent execution (Linux VMs)
-- **Multi-channel messaging** (WhatsApp, Telegram, Discord, Slack, Gmail) — add exactly the channels you need
+- **Multi-channel messaging** (Telegram, Discord, Slack, Gmail) — add exactly the channels you need
 - **Persistent memory** per conversation and globally
 - **Scheduled tasks** that run Claude and can message back
 - **Web access** for search and browsing
@@ -127,8 +127,8 @@ A personal Claude assistant accessible via messaging, with minimal custom code.
 ## Integration Points
 
 ### Channels
-- WhatsApp (baileys), Telegram (grammy), Discord (discord.js), Slack (@slack/bolt), Gmail (googleapis)
-- Each channel lives in a separate fork repo and is added via skills (e.g., `/add-whatsapp`, `/add-telegram`)
+- Telegram (grammy), Discord (discord.js), Slack (@slack/bolt), Gmail (googleapis)
+- Each channel lives in a separate fork repo and is added via skills (e.g., `/add-telegram`, `/add-discord`)
 - Messages stored in SQLite, polled by router
 - Channels self-register at startup — unconfigured channels are skipped with a warning
 
@@ -178,7 +178,7 @@ These are the creator's settings, stored here for reference:
 - **Trigger**: `@Andy` (case insensitive)
 - **Response prefix**: `Andy:`
 - **Persona**: Default Claude (no custom personality)
-- **Main channel**: Self-chat (messaging yourself in WhatsApp)
+- **Main channel**: Self-chat (messaging yourself in Telegram)
 
 ---
 

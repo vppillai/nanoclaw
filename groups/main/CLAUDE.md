@@ -58,7 +58,7 @@ Use Slack mrkdwn syntax. Run `/slack-formatting` for the full reference. Key rul
 - `>` for block quotes
 - No `##` headings — use `*Bold text*` instead
 
-### WhatsApp/Telegram (folder starts with `whatsapp_` or `telegram_`)
+### Telegram (folder starts with `telegram_`)
 
 - `*bold*` (single asterisks, NEVER **double**)
 - `_italic_` (underscores)
@@ -103,7 +103,7 @@ Available groups are provided in `/workspace/ipc/available_groups.json`:
 {
   "groups": [
     {
-      "jid": "120363336345536173@g.us",
+      "jid": "tg:-1001234567890",
       "name": "Family Chat",
       "lastActivity": "2026-01-31T12:00:00.000Z",
       "isRegistered": false
@@ -113,7 +113,7 @@ Available groups are provided in `/workspace/ipc/available_groups.json`:
 }
 ```
 
-Groups are ordered by most recent activity. The list is synced from WhatsApp daily.
+Groups are ordered by most recent activity.
 
 If a group the user mentions isn't in the list, request a fresh sync:
 
@@ -129,7 +129,7 @@ Then wait a moment and re-read `available_groups.json`.
 sqlite3 /workspace/project/store/messages.db "
   SELECT jid, name, last_message_time
   FROM chats
-  WHERE jid LIKE '%@g.us' AND jid != '__group_sync__'
+  WHERE jid LIKE 'tg:%' AND jid != '__group_sync__'
   ORDER BY last_message_time DESC
   LIMIT 10;
 "
@@ -141,9 +141,9 @@ Groups are registered in the SQLite `registered_groups` table:
 
 ```json
 {
-  "1234567890-1234567890@g.us": {
+  "tg:-1001234567890": {
     "name": "Family Chat",
-    "folder": "whatsapp_family-chat",
+    "folder": "telegram_family-chat",
     "trigger": "@Andy",
     "added_at": "2024-01-31T12:00:00.000Z"
   }
@@ -151,7 +151,7 @@ Groups are registered in the SQLite `registered_groups` table:
 ```
 
 Fields:
-- **Key**: The chat JID (unique identifier — WhatsApp, Telegram, Slack, Discord, etc.)
+- **Key**: The chat JID (unique identifier — Telegram, Slack, Discord, etc.)
 - **name**: Display name for the group
 - **folder**: Channel-prefixed folder name under `groups/` for this group's files and memory
 - **trigger**: The trigger word (usually same as global, but could differ)
@@ -174,7 +174,6 @@ Fields:
 5. Optionally create an initial `CLAUDE.md` for the group
 
 Folder naming convention — channel prefix with underscore separator:
-- WhatsApp "Family Chat" → `whatsapp_family-chat`
 - Telegram "Dev Team" → `telegram_dev-team`
 - Discord "General" → `discord_general`
 - Slack "Engineering" → `slack_engineering`
@@ -186,7 +185,7 @@ Groups can have extra directories mounted. Add `containerConfig` to their entry:
 
 ```json
 {
-  "1234567890@g.us": {
+  "tg:-1001234567890": {
     "name": "Dev Team",
     "folder": "dev-team",
     "trigger": "@Andy",
@@ -259,7 +258,7 @@ You can read and write to `/workspace/project/groups/global/CLAUDE.md` for facts
 ## Scheduling for Other Groups
 
 When scheduling tasks for other groups, use the `target_group_jid` parameter with the group's JID from `registered_groups.json`:
-- `schedule_task(prompt: "...", schedule_type: "cron", schedule_value: "0 9 * * 1", target_group_jid: "120363336345536173@g.us")`
+- `schedule_task(prompt: "...", schedule_type: "cron", schedule_value: "0 9 * * 1", target_group_jid: "tg:-1001234567890")`
 
 The task will run in that group's context with access to their files and memory.
 

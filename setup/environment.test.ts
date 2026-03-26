@@ -45,7 +45,7 @@ describe('registered groups DB query', () => {
       `INSERT INTO registered_groups (jid, name, folder, trigger_pattern, added_at, requires_trigger)
        VALUES (?, ?, ?, ?, ?, ?)`,
     ).run(
-      '123@g.us',
+      'tg:123',
       'Group 1',
       'group-1',
       '@Andy',
@@ -57,7 +57,7 @@ describe('registered groups DB query', () => {
       `INSERT INTO registered_groups (jid, name, folder, trigger_pattern, added_at, requires_trigger)
        VALUES (?, ?, ?, ?, ?, ?)`,
     ).run(
-      '456@g.us',
+      'tg:456',
       'Group 2',
       'group-2',
       '@Andy',

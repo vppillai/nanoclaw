@@ -1,19 +1,18 @@
 ---
 name: channel-formatting
-description: Convert Claude's Markdown output to each channel's native text syntax before delivery. Adds zero-dependency formatting for WhatsApp, Telegram, and Slack (marker substitution). Also ships a Signal rich-text helper (parseSignalStyles) used by the Signal skill.
+description: Convert Claude's Markdown output to each channel's native text syntax before delivery. Adds zero-dependency formatting for Telegram, and Slack (marker substitution). Also ships a Signal rich-text helper (parseSignalStyles) used by the Signal skill.
 ---
 
 # Channel Formatting
 
 This skill wires channel-aware Markdown conversion into the outbound pipeline so Claude's
-responses render natively on each platform — no more literal `**asterisks**` in WhatsApp or
+responses render natively on each platform — no more literal `**asterisks**` in Telegram or
 Telegram.
 
 | Channel | Transformation |
 |---------|---------------|
-| WhatsApp | `**bold**` → `*bold*`, `*italic*` → `_italic_`, headings → bold, links flattened |
-| Telegram | same as WhatsApp |
-| Slack | same as WhatsApp, but links become `<url\|text>` |
+| Telegram | same as Telegram |
+| Slack | same as Telegram, but links become `<url\|text>` |
 | Discord | passthrough (Discord already renders Markdown) |
 | Signal | passthrough for `parseTextStyles`; `parseSignalStyles` in `src/text-styles.ts` produces plain text + native `textStyle` ranges for use by the Signal skill |
 
@@ -93,7 +92,7 @@ launchctl kickstart -k gui/$(id -u)/com.nanoclaw   # macOS
 
 ### Spot-check formatting
 
-Send a message through any registered WhatsApp or Telegram chat that will trigger a
+Send a message through any registered Telegram chat that will trigger a
 response from Claude. Ask something that will produce formatted output, such as:
 
 > Summarise the three main advantages of TypeScript using bullet points and **bold** headings.

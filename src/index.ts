@@ -902,7 +902,7 @@ async function main(): Promise<void> {
     recoverPendingMessages,
   });
   // Recover status tracker AFTER channels connect, so recovery reactions
-  // can actually be sent via the WhatsApp channel.
+  // can actually be sent via the channel.
   await statusTracker.recover();
   queue.setProcessMessagesFn(processGroupMessages);
   recoverPendingMessages();

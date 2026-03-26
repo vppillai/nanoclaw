@@ -8,7 +8,7 @@ This guide walks through setting up NanoClaw inside a [Docker Sandbox](https://d
 Host (macOS / Windows WSL)
 └── Docker Sandbox (micro VM with isolated kernel)
     ├── NanoClaw process (Node.js)
-    │   ├── Channel adapters (WhatsApp, Telegram, etc.)
+    │   ├── Channel adapters (Telegram, Slack, etc.)
     │   └── Container spawner → nested Docker daemon
     └── Docker-in-Docker
         └── nanoclaw-agent containers
@@ -19,14 +19,13 @@ Each agent runs in its own container, inside a micro VM that is fully isolated f
 
 The sandbox provides a MITM proxy at `host.docker.internal:3128` that handles network access and injects your Anthropic API key automatically.
 
-> **Note:** This guide is based on a validated setup running on macOS (Apple Silicon) with WhatsApp. Other channels (Telegram, Slack, etc.) and environments (Windows WSL) may require additional proxy patches for their specific HTTP/WebSocket clients. The core patches (container runner, credential proxy, Dockerfile) apply universally — channel-specific proxy configuration varies.
+> **Note:** This guide is based on a validated setup running on macOS (Apple Silicon) with Telegram. Other channels (Slack, Discord, etc.) and environments (Windows WSL) may require additional proxy patches for their specific HTTP/WebSocket clients. The core patches (container runner, credential proxy, Dockerfile) apply universally — channel-specific proxy configuration varies.
 
 ## Prerequisites
 
 - **Docker Desktop v4.40+** with Sandbox support
 - **Anthropic API key** (the sandbox proxy manages injection)
 - For **Telegram**: a bot token from [@BotFather](https://t.me/BotFather) and your chat ID
-- For **WhatsApp**: a phone with WhatsApp installed
 
 Verify sandbox support:
 ```bash
@@ -44,17 +43,6 @@ mkdir -p ~/nanoclaw-workspace
 # Create a shell sandbox with the workspace mounted
 docker sandbox create shell ~/nanoclaw-workspace
 ```
-
-If you're using WhatsApp, configure proxy bypass so WhatsApp's Noise protocol isn't MITM-inspected:
-
-```bash
-docker sandbox network proxy shell-nanoclaw-workspace \
-  --bypass-host web.whatsapp.com \
-  --bypass-host "*.whatsapp.com" \
-  --bypass-host "*.whatsapp.net"
-```
-
-Telegram does not need proxy bypass.
 
 Enter the sandbox:
 ```bash
@@ -229,50 +217,6 @@ curl -s --proxy $HTTPS_PROXY "https://api.telegram.org/bot<TOKEN>/getUpdates" | 
 
 **Important:** If the Telegram skill creates `src/channels/telegram.ts`, you'll need to patch it for proxy support. Add an `HttpsProxyAgent` and pass it to grammy's `Bot` constructor via `baseFetchConfig.agent`. Then rebuild.
 
-### WhatsApp
-
-Make sure you configured proxy bypass in [Step 1](#step-1-create-the-sandbox) first.
-
-```bash
-# Apply the WhatsApp skill
-npx tsx scripts/apply-skill.ts .claude/skills/add-whatsapp
-
-# Rebuild
-npm run build
-
-# Configure .env
-cat > .env << EOF
-ASSISTANT_NAME=nanoclaw
-ANTHROPIC_API_KEY=proxy-managed
-EOF
-mkdir -p data/env && cp .env data/env/env
-
-# Authenticate (choose one):
-
-# QR code — scan with WhatsApp camera:
-npx tsx src/whatsapp-auth.ts
-
-# OR pairing code — enter code in WhatsApp > Linked Devices > Link with phone number:
-npx tsx src/whatsapp-auth.ts --pairing-code --phone <phone-number-no-plus>
-
-# Register your chat (JID = your phone number + @s.whatsapp.net)
-npx tsx setup/index.ts --step register \
-  --jid "<phone>@s.whatsapp.net" \
-  --name "My Chat" \
-  --trigger "@nanoclaw" \
-  --folder "whatsapp_main" \
-  --channel whatsapp \
-  --assistant-name "nanoclaw" \
-  --is-main \
-  --no-trigger-required
-```
-
-**Important:** The WhatsApp skill files (`src/channels/whatsapp.ts` and `src/whatsapp-auth.ts`) also need proxy patches — add `HttpsProxyAgent` for WebSocket connections and a proxy-aware version fetch. Then rebuild.
-
-### Both Channels
-
-Apply both skills, patch both for proxy support, combine the `.env` variables, and register each chat separately.
-
 ## Step 7: Run
 
 ```bash
@@ -328,18 +272,6 @@ All bind-mounted paths must be under the workspace directory. Check:
 ### Agent containers can't reach Anthropic API
 Verify proxy env vars are forwarded to agent containers. Check container logs for `HTTP_PROXY=http://host.docker.internal:3128`.
 
-### WhatsApp error 405
-The version fetch is returning a stale version. Make sure the proxy-aware `fetchWaVersionViaProxy` patch is applied — it fetches `sw.js` through `HttpsProxyAgent` and parses `client_revision`.
-
-### WhatsApp "Connection failed" immediately
-Proxy bypass not configured. From the **host**, run:
-```bash
-docker sandbox network proxy <sandbox-name> \
-  --bypass-host web.whatsapp.com \
-  --bypass-host "*.whatsapp.com" \
-  --bypass-host "*.whatsapp.net"
-```
-
 ### Telegram bot doesn't receive messages
 1. Check the grammy proxy patch is applied (look for `HttpsProxyAgent` in `src/channels/telegram.ts`)
 2. Check Group Privacy is disabled in @BotFather if using in groups
@@ -350,10 +282,3 @@ Clone to a non-workspace path first, then move:
 cd ~ && git clone https://github.com/qwibitai/nanoclaw.git && mv nanoclaw /path/to/workspace/nanoclaw
 ```
 
-### WhatsApp QR code doesn't display
-Run the auth command interactively inside the sandbox (not piped through `docker sandbox exec`):
-```bash
-docker sandbox run shell-nanoclaw-workspace
-# Then inside:
-npx tsx src/whatsapp-auth.ts
-```

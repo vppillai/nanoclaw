@@ -40,15 +40,15 @@ beforeEach(() => {
   _initTestDatabase();
 
   groups = {
-    'main@g.us': MAIN_GROUP,
-    'other@g.us': OTHER_GROUP,
-    'third@g.us': THIRD_GROUP,
+    'tg:100': MAIN_GROUP,
+    'tg:200': OTHER_GROUP,
+    'tg:300': THIRD_GROUP,
   };
 
   // Populate DB as well
-  setRegisteredGroup('main@g.us', MAIN_GROUP);
-  setRegisteredGroup('other@g.us', OTHER_GROUP);
-  setRegisteredGroup('third@g.us', THIRD_GROUP);
+  setRegisteredGroup('tg:100', MAIN_GROUP);
+  setRegisteredGroup('tg:200', OTHER_GROUP);
+  setRegisteredGroup('tg:300', THIRD_GROUP);
 
   deps = {
     sendMessage: async () => {},
@@ -75,7 +75,7 @@ describe('schedule_task authorization', () => {
         prompt: 'do something',
         schedule_type: 'once',
         schedule_value: '2025-06-01T00:00:00.000Z',
-        targetJid: 'other@g.us',
+        targetJid: 'tg:200',
       },
       'main',
       true,
@@ -95,7 +95,7 @@ describe('schedule_task authorization', () => {
         prompt: 'self task',
         schedule_type: 'once',
         schedule_value: '2025-06-01T00:00:00.000Z',
-        targetJid: 'other@g.us',
+        targetJid: 'tg:200',
       },
       'other-group',
       false,
@@ -114,7 +114,7 @@ describe('schedule_task authorization', () => {
         prompt: 'unauthorized',
         schedule_type: 'once',
         schedule_value: '2025-06-01T00:00:00.000Z',
-        targetJid: 'main@g.us',
+        targetJid: 'tg:100',
       },
       'other-group',
       false,
@@ -132,7 +132,7 @@ describe('schedule_task authorization', () => {
         prompt: 'no target',
         schedule_type: 'once',
         schedule_value: '2025-06-01T00:00:00.000Z',
-        targetJid: 'unknown@g.us',
+        targetJid: 'tg:999',
       },
       'main',
       true,
@@ -151,7 +151,7 @@ describe('pause_task authorization', () => {
     createTask({
       id: 'task-main',
       group_folder: 'main',
-      chat_jid: 'main@g.us',
+      chat_jid: 'tg:100',
       prompt: 'main task',
       schedule_type: 'once',
       schedule_value: '2025-06-01T00:00:00.000Z',
@@ -163,7 +163,7 @@ describe('pause_task authorization', () => {
     createTask({
       id: 'task-other',
       group_folder: 'other-group',
-      chat_jid: 'other@g.us',
+      chat_jid: 'tg:200',
       prompt: 'other task',
       schedule_type: 'once',
       schedule_value: '2025-06-01T00:00:00.000Z',
@@ -212,7 +212,7 @@ describe('resume_task authorization', () => {
     createTask({
       id: 'task-paused',
       group_folder: 'other-group',
-      chat_jid: 'other@g.us',
+      chat_jid: 'tg:200',
       prompt: 'paused task',
       schedule_type: 'once',
       schedule_value: '2025-06-01T00:00:00.000Z',
@@ -261,7 +261,7 @@ describe('cancel_task authorization', () => {
     createTask({
       id: 'task-to-cancel',
       group_folder: 'other-group',
-      chat_jid: 'other@g.us',
+      chat_jid: 'tg:200',
       prompt: 'cancel me',
       schedule_type: 'once',
       schedule_value: '2025-06-01T00:00:00.000Z',
@@ -284,7 +284,7 @@ describe('cancel_task authorization', () => {
     createTask({
       id: 'task-own',
       group_folder: 'other-group',
-      chat_jid: 'other@g.us',
+      chat_jid: 'tg:200',
       prompt: 'my task',
       schedule_type: 'once',
       schedule_value: '2025-06-01T00:00:00.000Z',
@@ -307,7 +307,7 @@ describe('cancel_task authorization', () => {
     createTask({
       id: 'task-foreign',
       group_folder: 'main',
-      chat_jid: 'main@g.us',
+      chat_jid: 'tg:100',
       prompt: 'not yours',
       schedule_type: 'once',
       schedule_value: '2025-06-01T00:00:00.000Z',
@@ -334,7 +334,7 @@ describe('register_group authorization', () => {
     await processTaskIpc(
       {
         type: 'register_group',
-        jid: 'new@g.us',
+        jid: 'tg:400',
         name: 'New Group',
         folder: 'new-group',
         trigger: '@Andy',
@@ -345,14 +345,14 @@ describe('register_group authorization', () => {
     );
 
     // registeredGroups should not have changed
-    expect(groups['new@g.us']).toBeUndefined();
+    expect(groups['tg:400']).toBeUndefined();
   });
 
   it('main group cannot register with unsafe folder path', async () => {
     await processTaskIpc(
       {
         type: 'register_group',
-        jid: 'new@g.us',
+        jid: 'tg:400',
         name: 'New Group',
         folder: '../../outside',
         trigger: '@Andy',
@@ -362,7 +362,7 @@ describe('register_group authorization', () => {
       deps,
     );
 
-    expect(groups['new@g.us']).toBeUndefined();
+    expect(groups['tg:400']).toBeUndefined();
   });
 });
 
@@ -398,34 +398,34 @@ describe('IPC message authorization', () => {
   }
 
   it('main group can send to any group', () => {
-    expect(isMessageAuthorized('main', true, 'other@g.us', groups)).toBe(true);
-    expect(isMessageAuthorized('main', true, 'third@g.us', groups)).toBe(true);
+    expect(isMessageAuthorized('main', true, 'tg:200', groups)).toBe(true);
+    expect(isMessageAuthorized('main', true, 'tg:300', groups)).toBe(true);
   });
 
   it('non-main group can send to its own chat', () => {
     expect(
-      isMessageAuthorized('other-group', false, 'other@g.us', groups),
+      isMessageAuthorized('other-group', false, 'tg:200', groups),
     ).toBe(true);
   });
 
   it('non-main group cannot send to another groups chat', () => {
-    expect(isMessageAuthorized('other-group', false, 'main@g.us', groups)).toBe(
+    expect(isMessageAuthorized('other-group', false, 'tg:100', groups)).toBe(
       false,
     );
     expect(
-      isMessageAuthorized('other-group', false, 'third@g.us', groups),
+      isMessageAuthorized('other-group', false, 'tg:300', groups),
     ).toBe(false);
   });
 
   it('non-main group cannot send to unregistered JID', () => {
     expect(
-      isMessageAuthorized('other-group', false, 'unknown@g.us', groups),
+      isMessageAuthorized('other-group', false, 'tg:999', groups),
     ).toBe(false);
   });
 
   it('main group can send to unregistered JID', () => {
     // Main is always authorized regardless of target
-    expect(isMessageAuthorized('main', true, 'unknown@g.us', groups)).toBe(
+    expect(isMessageAuthorized('main', true, 'tg:999', groups)).toBe(
       true,
     );
   });
@@ -447,28 +447,28 @@ describe('IPC reaction authorization', () => {
   }
 
   it('main group can react in any chat', () => {
-    expect(isReactionAuthorized('main', true, 'other@g.us', groups)).toBe(true);
-    expect(isReactionAuthorized('main', true, 'third@g.us', groups)).toBe(true);
+    expect(isReactionAuthorized('main', true, 'tg:200', groups)).toBe(true);
+    expect(isReactionAuthorized('main', true, 'tg:300', groups)).toBe(true);
   });
 
   it('non-main group can react in its own chat', () => {
     expect(
-      isReactionAuthorized('other-group', false, 'other@g.us', groups),
+      isReactionAuthorized('other-group', false, 'tg:200', groups),
     ).toBe(true);
   });
 
   it('non-main group cannot react in another groups chat', () => {
     expect(
-      isReactionAuthorized('other-group', false, 'main@g.us', groups),
+      isReactionAuthorized('other-group', false, 'tg:100', groups),
     ).toBe(false);
     expect(
-      isReactionAuthorized('other-group', false, 'third@g.us', groups),
+      isReactionAuthorized('other-group', false, 'tg:300', groups),
     ).toBe(false);
   });
 
   it('non-main group cannot react in unregistered JID', () => {
     expect(
-      isReactionAuthorized('other-group', false, 'unknown@g.us', groups),
+      isReactionAuthorized('other-group', false, 'tg:999', groups),
     ).toBe(false);
   });
 });
@@ -487,7 +487,7 @@ describe('IPC reaction sendReaction integration', () => {
     // Simulate what processIpcFiles does for a reaction
     const data = {
       type: 'reaction' as const,
-      chatJid: 'other@g.us',
+      chatJid: 'tg:200',
       emoji: '👍',
       messageId: 'msg-123',
     };
@@ -502,7 +502,7 @@ describe('IPC reaction sendReaction integration', () => {
 
     expect(calls).toHaveLength(1);
     expect(calls[0]).toEqual({
-      jid: 'other@g.us',
+      jid: 'tg:200',
       emoji: '👍',
       messageId: 'msg-123',
     });
@@ -516,7 +516,7 @@ describe('IPC reaction sendReaction integration', () => {
 
     const data = {
       type: 'reaction' as const,
-      chatJid: 'main@g.us',
+      chatJid: 'tg:100',
       emoji: '❤️',
     };
     const sourceGroup = 'other-group';
@@ -539,7 +539,7 @@ describe('IPC reaction sendReaction integration', () => {
 
     const data = {
       type: 'reaction' as const,
-      chatJid: 'other@g.us',
+      chatJid: 'tg:200',
       emoji: '🔥',
     };
     const sourceGroup = 'other-group';
@@ -553,7 +553,7 @@ describe('IPC reaction sendReaction integration', () => {
 
     expect(calls).toHaveLength(1);
     expect(calls[0]).toEqual({
-      jid: 'other@g.us',
+      jid: 'tg:200',
       emoji: '🔥',
       messageId: undefined,
     });
@@ -570,7 +570,7 @@ describe('schedule_task schedule types', () => {
         prompt: 'cron task',
         schedule_type: 'cron',
         schedule_value: '0 9 * * *', // every day at 9am
-        targetJid: 'other@g.us',
+        targetJid: 'tg:200',
       },
       'main',
       true,
@@ -594,7 +594,7 @@ describe('schedule_task schedule types', () => {
         prompt: 'bad cron',
         schedule_type: 'cron',
         schedule_value: 'not a cron',
-        targetJid: 'other@g.us',
+        targetJid: 'tg:200',
       },
       'main',
       true,
@@ -613,7 +613,7 @@ describe('schedule_task schedule types', () => {
         prompt: 'interval task',
         schedule_type: 'interval',
         schedule_value: '3600000', // 1 hour
-        targetJid: 'other@g.us',
+        targetJid: 'tg:200',
       },
       'main',
       true,
@@ -636,7 +636,7 @@ describe('schedule_task schedule types', () => {
         prompt: 'bad interval',
         schedule_type: 'interval',
         schedule_value: 'abc',
-        targetJid: 'other@g.us',
+        targetJid: 'tg:200',
       },
       'main',
       true,
@@ -653,7 +653,7 @@ describe('schedule_task schedule types', () => {
         prompt: 'zero interval',
         schedule_type: 'interval',
         schedule_value: '0',
-        targetJid: 'other@g.us',
+        targetJid: 'tg:200',
       },
       'main',
       true,
@@ -670,7 +670,7 @@ describe('schedule_task schedule types', () => {
         prompt: 'bad once',
         schedule_type: 'once',
         schedule_value: 'not-a-date',
-        targetJid: 'other@g.us',
+        targetJid: 'tg:200',
       },
       'main',
       true,
@@ -692,7 +692,7 @@ describe('schedule_task context_mode', () => {
         schedule_type: 'once',
         schedule_value: '2025-06-01T00:00:00.000Z',
         context_mode: 'group',
-        targetJid: 'other@g.us',
+        targetJid: 'tg:200',
       },
       'main',
       true,
@@ -711,7 +711,7 @@ describe('schedule_task context_mode', () => {
         schedule_type: 'once',
         schedule_value: '2025-06-01T00:00:00.000Z',
         context_mode: 'isolated',
-        targetJid: 'other@g.us',
+        targetJid: 'tg:200',
       },
       'main',
       true,
@@ -730,7 +730,7 @@ describe('schedule_task context_mode', () => {
         schedule_type: 'once',
         schedule_value: '2025-06-01T00:00:00.000Z',
         context_mode: 'bogus' as any,
-        targetJid: 'other@g.us',
+        targetJid: 'tg:200',
       },
       'main',
       true,
@@ -748,7 +748,7 @@ describe('schedule_task context_mode', () => {
         prompt: 'no context mode',
         schedule_type: 'once',
         schedule_value: '2025-06-01T00:00:00.000Z',
-        targetJid: 'other@g.us',
+        targetJid: 'tg:200',
       },
       'main',
       true,
@@ -767,7 +767,7 @@ describe('register_group success', () => {
     await processTaskIpc(
       {
         type: 'register_group',
-        jid: 'new@g.us',
+        jid: 'tg:400',
         name: 'New Group',
         folder: 'new-group',
         trigger: '@Andy',
@@ -778,7 +778,7 @@ describe('register_group success', () => {
     );
 
     // Verify group was registered in DB
-    const group = getRegisteredGroup('new@g.us');
+    const group = getRegisteredGroup('tg:400');
     expect(group).toBeDefined();
     expect(group!.name).toBe('New Group');
     expect(group!.folder).toBe('new-group');
@@ -789,7 +789,7 @@ describe('register_group success', () => {
     await processTaskIpc(
       {
         type: 'register_group',
-        jid: 'partial@g.us',
+        jid: 'tg:500',
         name: 'Partial',
         // missing folder and trigger
       },
@@ -798,6 +798,6 @@ describe('register_group success', () => {
       deps,
     );
 
-    expect(getRegisteredGroup('partial@g.us')).toBeUndefined();
+    expect(getRegisteredGroup('tg:500')).toBeUndefined();
   });
 });

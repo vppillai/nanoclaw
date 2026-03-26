@@ -61,7 +61,7 @@ claude
 
 その後、`/setup`を実行します。Claude Codeがすべてを処理します：依存関係、認証、コンテナセットアップ、サービス設定。
 
-> **注意:** `/`で始まるコマンド（`/setup`、`/add-whatsapp`など）は[Claude Codeスキル](https://code.claude.com/docs/en/skills)です。通常のターミナルではなく、`claude` CLIプロンプト内で入力してください。Claude Codeをインストールしていない場合は、[claude.com/product/claude-code](https://claude.com/product/claude-code)から入手してください。
+> **注意:** `/`で始まるコマンド（`/setup`、`/add-telegram`など）は[Claude Codeスキル](https://code.claude.com/docs/en/skills)です。通常のターミナルではなく、`claude` CLIプロンプト内で入力してください。Claude Codeをインストールしていない場合は、[claude.com/product/claude-code](https://claude.com/product/claude-code)から入手してください。
 
 ## 設計思想
 
@@ -84,7 +84,7 @@ claude
 
 ## サポート機能
 
-- **マルチチャネルメッセージング** - WhatsApp、Telegram、Discord、Slack、Gmailからアシスタントと会話。`/add-whatsapp`や`/add-telegram`などのスキルでチャネルを追加。1つでも複数でも同時に実行可能。
+- **マルチチャネルメッセージング** - Telegram、Discord、Slack、Gmailからアシスタントと会話。`/add-telegram`や`/add-slack`などのスキルでチャネルを追加。1つでも複数でも同時に実行可能。
 - **グループごとの分離コンテキスト** - 各グループは独自の`CLAUDE.md`メモリ、分離されたファイルシステムを持ち、そのファイルシステムのみがマウントされた専用コンテナサンドボックスで実行。
 - **メインチャネル** - 管理制御用のプライベートチャネル（セルフチャット）。各グループは完全に分離。
 - **スケジュールタスク** - Claudeを実行し、メッセージを返せる定期ジョブ。

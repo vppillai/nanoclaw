@@ -1,6 +1,6 @@
 ---
 name: add-telegram
-description: Add Telegram as a channel. Can replace WhatsApp entirely or run alongside it. Also configurable as a control-only channel (triggers actions) or passive channel (receives notifications only).
+description: Add Telegram as a channel. Can run alongside other channels. Also configurable as a control-only channel (triggers actions) or passive channel (receives notifications only).
 ---
 
 # Add Telegram Channel
