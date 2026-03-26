@@ -433,6 +433,7 @@ async function runQuery(
         'mcp__mysa__*',
         'mcp__gcal__*',
         'mcp__maps__*',
+        'mcp__tasks__*',
       ],
       env: sdkEnv,
       permissionMode: 'bypassPermissions',
@@ -494,6 +495,19 @@ async function runQuery(
                 args: [path.join(path.dirname(mcpServerPath), 'maps-mcp.js')],
                 env: {
                   GOOGLE_MAPS_API_KEY: process.env.GOOGLE_MAPS_API_KEY,
+                },
+              },
+            }
+          : {}),
+        ...(process.env.GOOGLE_OAUTH_REFRESH_TOKEN
+          ? {
+              tasks: {
+                command: 'node',
+                args: [path.join(path.dirname(mcpServerPath), 'tasks-mcp.js')],
+                env: {
+                  GOOGLE_OAUTH_CLIENT_ID: process.env.GOOGLE_OAUTH_CLIENT_ID || '',
+                  GOOGLE_OAUTH_CLIENT_SECRET: process.env.GOOGLE_OAUTH_CLIENT_SECRET || '',
+                  GOOGLE_OAUTH_REFRESH_TOKEN: process.env.GOOGLE_OAUTH_REFRESH_TOKEN,
                 },
               },
             }

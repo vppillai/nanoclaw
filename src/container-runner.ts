@@ -40,6 +40,9 @@ const PASSTHROUGH_ENV_KEYS = [
   'GOOGLE_FAMILY_CALENDAR_ID',
   'GOOGLE_PERSONAL_CALENDAR_ID',
   'GOOGLE_MAPS_API_KEY',
+  'GOOGLE_OAUTH_CLIENT_ID',
+  'GOOGLE_OAUTH_CLIENT_SECRET',
+  'GOOGLE_OAUTH_REFRESH_TOKEN',
 ];
 
 // Sentinel markers for robust output parsing (must match agent-runner)
