@@ -1,9 +1,10 @@
 import fs from 'fs';
 import https from 'https';
+import path from 'path';
 import { InputFile } from 'grammy';
 import { Api, Bot } from 'grammy';
 
-import { ASSISTANT_NAME, TRIGGER_PATTERN } from '../config.js';
+import { ASSISTANT_NAME, GROUPS_DIR, TRIGGER_PATTERN } from '../config.js';
 import { readEnvFile } from '../env.js';
 import { logger } from '../logger.js';
 import { registerChannel, ChannelOpts } from './registry.js';
@@ -334,9 +335,56 @@ export class TelegramChannel implements Channel {
       });
     });
     this.bot.on('message:audio', (ctx) => storeNonText(ctx, '[Audio]'));
-    this.bot.on('message:document', (ctx) => {
-      const name = ctx.message.document?.file_name || 'file';
-      storeNonText(ctx, `[Document: ${name}]`);
+    this.bot.on('message:document', async (ctx) => {
+      const chatJid = `tg:${ctx.chat.id}`;
+      const group = this.opts.registeredGroups()[chatJid];
+      if (!group) return;
+
+      const fileName = ctx.message.document?.file_name || 'file';
+      const mimeType = ctx.message.document?.mime_type || '';
+      const isPdf = mimeType === 'application/pdf' || fileName.endsWith('.pdf');
+
+      if (isPdf) {
+        // Download PDF and save to group attachments
+        let content = `[Document: ${fileName}]`;
+        try {
+          const file = await ctx.getFile();
+          const url = `https://api.telegram.org/file/bot${this.botToken}/${file.file_path}`;
+          const resp = await fetch(url);
+          if (resp.ok) {
+            const buffer = Buffer.from(await resp.arrayBuffer());
+            const groupDir = path.join(GROUPS_DIR, group.folder);
+            const attachDir = path.join(groupDir, 'attachments');
+            fs.mkdirSync(attachDir, { recursive: true });
+            const safeName = path.basename(fileName);
+            const filePath = path.join(attachDir, safeName);
+            fs.writeFileSync(filePath, buffer);
+            const sizeKB = Math.round(buffer.length / 1024);
+            const pdfRef = `[PDF: attachments/${safeName} (${sizeKB}KB)]\nUse: pdf-reader extract attachments/${safeName}`;
+            const caption = ctx.message.caption || '';
+            content = caption ? `${caption}\n\n${pdfRef}` : pdfRef;
+            logger.info({ chatJid, fileName: safeName }, 'Downloaded Telegram PDF attachment');
+          }
+        } catch (err) {
+          logger.warn({ err, chatJid }, 'Failed to download Telegram PDF');
+        }
+
+        const timestamp = new Date(ctx.message.date * 1000).toISOString();
+        const senderName = ctx.from?.first_name || ctx.from?.username || 'Unknown';
+        const isGroup = ctx.chat.type === 'group' || ctx.chat.type === 'supergroup';
+        this.opts.onChatMetadata(chatJid, timestamp, undefined, 'telegram', isGroup);
+        this.opts.onMessage(chatJid, {
+          id: ctx.message.message_id.toString(),
+          chat_jid: chatJid,
+          sender: ctx.from?.id?.toString() || '',
+          sender_name: senderName,
+          content,
+          timestamp,
+          is_from_me: false,
+        });
+      } else {
+        storeNonText(ctx, `[Document: ${fileName}]`);
+      }
     });
     this.bot.on('message:sticker', (ctx) => {
       const emoji = ctx.message.sticker?.emoji || '';
