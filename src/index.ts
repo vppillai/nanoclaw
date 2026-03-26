@@ -308,6 +308,10 @@ async function processGroupMessages(chatJid: string): Promise<boolean> {
   };
 
   await channel.setTyping?.(chatJid, true);
+  // Refresh typing indicator every 4s (Telegram expires after 5s)
+  const typingInterval = setInterval(() => {
+    channel.setTyping?.(chatJid, true)?.catch(() => {});
+  }, 4000);
   let hadError = false;
   let outputSentToUser = false;
   let firstOutputSeen = false;
@@ -317,6 +321,7 @@ async function processGroupMessages(chatJid: string): Promise<boolean> {
     if (result.result) {
       if (!firstOutputSeen) {
         firstOutputSeen = true;
+        clearInterval(typingInterval);
         for (const um of userMessages) {
           statusTracker.markWorking(um.id);
         }
@@ -346,6 +351,7 @@ async function processGroupMessages(chatJid: string): Promise<boolean> {
     }
   });
 
+  clearInterval(typingInterval);
   await channel.setTyping?.(chatJid, false);
   if (idleTimer) clearTimeout(idleTimer);
 
