@@ -463,6 +463,18 @@ export class TelegramChannel implements Channel {
     }
   }
 
+  // Telegram only supports a restricted set of reaction emojis.
+  // Map StatusTracker emojis to valid Telegram equivalents.
+  private static EMOJI_MAP: Record<string, string> = {
+    '\u{1F441}': '\u{1F440}', // 👁️ (received) → 👀
+    '\u{1F441}\uFE0F': '\u{1F440}', // 👁️ variant → 👀
+    '\u{23F3}': '\u{1F525}', // ⏳ (thinking) → 🔥
+    '\u{2699}': '\u{26A1}', // ⚙️ (working) → ⚡
+    '\u{2699}\uFE0F': '\u{26A1}', // ⚙️ variant → ⚡
+    '\u{2705}': '\u{1F44D}', // ✅ (done) → 👍
+    '\u{274C}': '\u{1F44E}', // ❌ (failed) → 👎
+  };
+
   async sendReaction(
     chatJid: string,
     messageKey: { id: string; remoteJid: string; fromMe?: boolean },
@@ -473,8 +485,9 @@ export class TelegramChannel implements Channel {
       const numericChatId = chatJid.replace(/^tg:/, '');
       const messageId = parseInt(messageKey.id, 10);
       if (isNaN(messageId)) return;
+      const tgEmoji = TelegramChannel.EMOJI_MAP[emoji] || emoji;
       await this.bot.api.setMessageReaction(numericChatId, messageId, [
-        { type: 'emoji', emoji: emoji as any },
+        { type: 'emoji', emoji: tgEmoji as any },
       ]);
     } catch (err) {
       logger.debug({ chatJid, emoji, err }, 'Failed to set Telegram reaction');
