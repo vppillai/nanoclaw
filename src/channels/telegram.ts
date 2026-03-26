@@ -462,6 +462,32 @@ export class TelegramChannel implements Channel {
       logger.debug({ jid, err }, 'Failed to send Telegram typing indicator');
     }
   }
+
+  async sendReaction(
+    chatJid: string,
+    messageKey: { id: string; remoteJid: string; fromMe?: boolean },
+    emoji: string,
+  ): Promise<void> {
+    if (!this.bot) return;
+    try {
+      const numericChatId = chatJid.replace(/^tg:/, '');
+      const messageId = parseInt(messageKey.id, 10);
+      if (isNaN(messageId)) return;
+      await this.bot.api.setMessageReaction(numericChatId, messageId, [
+        { type: 'emoji', emoji: emoji as any },
+      ]);
+    } catch (err) {
+      logger.debug({ chatJid, emoji, err }, 'Failed to set Telegram reaction');
+    }
+  }
+
+  async reactToLatestMessage(chatJid: string, emoji: string): Promise<void> {
+    // Telegram doesn't have a "latest message" lookup — skip
+    logger.debug(
+      { chatJid, emoji },
+      'reactToLatestMessage not supported for Telegram',
+    );
+  }
 }
 
 registerChannel('telegram', (opts: ChannelOpts) => {
