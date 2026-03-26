@@ -534,7 +534,8 @@ async function startMessageLoop(): Promise<void> {
             // Only close active container if the sender is authorized — otherwise an
             // untrusted user could kill in-flight work by sending /compact (DoS).
             // closeStdin no-ops internally when no container is active.
-            const isPrivateTg = chatJid.startsWith('tg:') && !chatJid.startsWith('tg:-');
+            const isPrivateTg =
+              chatJid.startsWith('tg:') && !chatJid.startsWith('tg:-');
             if (
               isSessionCommandAllowed(
                 isMainGroup,
