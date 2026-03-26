@@ -432,6 +432,7 @@ async function runQuery(
         'mcp__kasa__*',
         'mcp__mysa__*',
         'mcp__gcal__*',
+        'mcp__maps__*',
       ],
       env: sdkEnv,
       permissionMode: 'bypassPermissions',
@@ -482,6 +483,17 @@ async function runQuery(
                   ...(process.env.GOOGLE_PERSONAL_CALENDAR_ID
                     ? { GOOGLE_PERSONAL_CALENDAR_ID: process.env.GOOGLE_PERSONAL_CALENDAR_ID }
                     : {}),
+                },
+              },
+            }
+          : {}),
+        ...(process.env.GOOGLE_MAPS_API_KEY
+          ? {
+              maps: {
+                command: 'node',
+                args: [path.join(path.dirname(mcpServerPath), 'maps-mcp.js')],
+                env: {
+                  GOOGLE_MAPS_API_KEY: process.env.GOOGLE_MAPS_API_KEY,
                 },
               },
             }
