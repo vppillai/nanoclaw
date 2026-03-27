@@ -331,6 +331,80 @@ WatchdogDevice=/dev/watchdog0
 EOF
 ```
 
+### WiFi IPv4 DHCP recovery watchdog
+WiFi interfaces can lose their IPv4 DHCP lease due to IP conflicts, router DHCP issues, or lease expiry races — leaving the system IPv6-only. Most third-party API providers (e.g. MiniMax) are IPv4-only, so this silently breaks the agent. This systemd timer checks every 2 minutes and cycles the connection if IPv4 is missing.
+
+Detect the active WiFi connection name:
+```bash
+WIFI_IFACE=$(nmcli -t -f DEVICE,TYPE device | awk -F: '$2=="wifi"{print $1; exit}')
+WIFI_CON=$(nmcli -t -f NAME,DEVICE connection show --active | awk -F: -v dev="$WIFI_IFACE" '$2==dev{print $1; exit}')
+```
+
+If `WIFI_IFACE` is empty (no WiFi), skip this section entirely.
+
+```bash
+sudo tee /usr/local/bin/check-wlan-ipv4.sh << SCRIPT
+#!/bin/bash
+# Watchdog: ensure WiFi interface has an IPv4 address.
+# If IPv4 is missing but the interface is up, cycle the NM connection.
+
+IFACE="$WIFI_IFACE"
+CONNECTION="$WIFI_CON"
+LOG_TAG="wlan-ipv4-watchdog"
+
+# Only act if the interface exists and is UP
+if ! ip link show "\$IFACE" up &>/dev/null; then
+    exit 0
+fi
+
+# Check for an IPv4 address
+if ip -4 addr show "\$IFACE" | grep -q 'inet '; then
+    exit 0
+fi
+
+logger -t "\$LOG_TAG" "No IPv4 on \$IFACE — cycling connection \$CONNECTION"
+nmcli connection down "\$CONNECTION" 2>/dev/null
+sleep 3
+nmcli connection up "\$CONNECTION" 2>/dev/null
+
+# Wait and verify
+sleep 5
+if ip -4 addr show "\$IFACE" | grep -q 'inet '; then
+    logger -t "\$LOG_TAG" "IPv4 restored on \$IFACE"
+else
+    logger -t "\$LOG_TAG" "WARNING: IPv4 still missing after cycle"
+fi
+SCRIPT
+sudo chmod +x /usr/local/bin/check-wlan-ipv4.sh
+
+sudo tee /etc/systemd/system/wlan0-ipv4-watchdog.service << 'EOF'
+[Unit]
+Description=Check WiFi has IPv4 and recover if missing
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+Type=oneshot
+ExecStart=/usr/local/bin/check-wlan-ipv4.sh
+EOF
+
+sudo tee /etc/systemd/system/wlan0-ipv4-watchdog.timer << 'EOF'
+[Unit]
+Description=Run WiFi IPv4 watchdog every 2 minutes
+
+[Timer]
+OnBootSec=60
+OnUnitActiveSec=120
+AccuracySec=30
+
+[Install]
+WantedBy=timers.target
+EOF
+
+sudo systemctl daemon-reload
+sudo systemctl enable --now wlan0-ipv4-watchdog.timer
+```
+
 ### Network watchdog (reboot on sustained network loss)
 ```bash
 sudo tee /usr/local/bin/network-watchdog.sh << 'SCRIPT'
